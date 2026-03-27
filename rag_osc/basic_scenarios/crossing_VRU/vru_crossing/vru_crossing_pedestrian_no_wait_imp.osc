@@ -1,0 +1,69 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Implementation file for pedestrian crossing instance
+
+extend sut.vru_crossing_pedestrian_no_wait:
+
+    on @phase_essence.start:
+        call logger.log_info("gen_pedestrian_longitudinal_distance:$(gen_pedestrian_longitudinal_distance)")
+        call logger.log_info("gen_pedestrian_lateral_distance:$(gen_pedestrian_lateral_distance)")
+        call logger.log_info("up_coming_car.state.speed:$(up_coming_car.state.speed)")
+        call logger.log_info("sut.car.state.msp_pos.road_position.lon_offset:$(sut.car.state.msp_pos.road_position.lon_offset)")
+        call logger.log_info("gen_pedestrian_crossing_time:$(gen_pedestrian_crossing_time)")
+        call logger.log_info("gen_pedestrian_lateral_time: $(gen_pedestrian_lateral_distance/gen_pedestrian_speed)")
+        # call logger.log_info("gen_pedestrian_longitudinal_distance: $(gen_pedestrian_longitudinal_distance")
+        call logger.log_info("gen_pedestrian_longitudinal_time: $(gen_pedestrian_longitudinal_distance/up_coming_car.state.speed)")
+        #call logger.log_info("meet_distance: $(meet_distance)")
+        call logger.log_info("longtitudinal_offset:$(total_longtitudinal_offset)")
+        call logger.log_info("lateral_offset:$(gen_pedestrian_lateral_distance)")
+        #call logger.log_info("meet_time: $(meet_time)")
+    # on @top.clk: 
+    #     #call logger.log_info("logging from vru_crossing_pedestrian scenario")
+    #     #call logger.log_info("trigger_time : $(trigger_time)")
+    #     #if up_coming_car.prev_state !=null: 
+    #     #    call logger.log_info("up_coming_car.prev_state.speed  : $(up_coming_car.prev_state.speed)")    
+    #     # call logger.log_info("up_coming_car.prev_state  : $(up_coming_car.prev_state)")
+    #     # call logger.log_info("up_coming_car.prev_state.speed  : $(up_coming_car.prev_state.speed)")
+    #     call logger.log_info("gen_pedestrian_crossing_time:$(gen_pedestrian_crossing_time)")
+    #     call logger.log_info("time_to_meet:$(time_to_meet)")
+
+    vru_start_pos: msp_position
+    vru_end_pos: msp_position
+    plain_object_group_position_along_ref_position(vru_group_start_position_params, pedestrian_group, vru_start_pos)
+    plain_object_group_position_along_ref_position(vru_group_end_position_params, pedestrian_group, vru_end_pos)
+    
+    # Position pedestrians based on parameters
+    # This would typically involve positioning logic based on the parameters
+    # For now, we'll define the basic structure
+
+    position_along_road(vru_start_pos, my_road, 
+        lon_offset: gen_pedestrian_longitudinal_distance, 
+        lat_offset: gen_pedestrian_lateral_final, rightmost_lane: true)
+    position_along_road(vru_end_pos, my_road, 
+        lon_offset: gen_pedestrian_longitudinal_distance, 
+        lat_offset: -gen_pedestrian_lateral_final, rightmost_lane: true)
+
+    #first_object: person
+    #vru_test_pos: msp_position
+    #position_along_road(vru_test_pos, junction.internal_road, lon_offset: lon_offset, lat_offset: -10m)
+
+    do phase_essence: serial():
+        # move_trigger: wait @move_trigger_event
+        # Pedestrian movement logic would go here
+        # For each pedestrian in the group:
+        #first_object.exists_at(vru_test_pos)
+
+        pedestrian_group_move_at_essence: pedestrian_group.group_move(vru_group_end_position_params, \
+            duration: gen_pedestrian_crossing_time, 
+            start_position_params: vru_group_start_position_params,
+            start_at_speed: true)             
+            

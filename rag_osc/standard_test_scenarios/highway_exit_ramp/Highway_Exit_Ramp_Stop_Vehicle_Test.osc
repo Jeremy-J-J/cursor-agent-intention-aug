@@ -1,0 +1,60 @@
+# 测试场景: 匝道停止
+# 描述: 测试高速出口匝道上遇到停止车辆的应对
+# 场景: 自车以100kph在高速路行驶,驶入出口匝道后发现前方200米处有停止车辆
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_highway_exit_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.ramp_stop_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "ramp_stop_test_run")
+    
+    # 高速出口
+    my_road: highway_exit
+
+    # 自车起始车道
+    ego_lane: int with:
+        keep(ego_lane >= 1)
+    
+    # 行驶持续时间
+    driving_duration: time with:
+        keep(default it == 20s)
+    
+    # NPC停止车辆距离
+    npc_stop_distance: length with:
+        keep(default it == 200m)
+    
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    do serial():
+        set_up: parallel():
+            # 自车从高速路驶入出口
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_highway_exit() with:
+                keep(it.gen_ego_speed_at_start == 100kph)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.gen_ego_lane_at_end == ego_lane + 1)
+                keep(it.ego_driving_duration == driving_duration)
+
+            # 出口匝道上的停止车辆
+            npc_stop_vehicle: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == npc_stop_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane + 1)
+                keep(it.npc_target_lane == ego_lane + 1)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.ramp_stop_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "ramp_stop_test_run"
+    set additional_parameters.test_index = "auto_20251130_000001"

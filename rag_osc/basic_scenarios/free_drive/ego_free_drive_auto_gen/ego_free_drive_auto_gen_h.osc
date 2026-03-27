@@ -1,0 +1,71 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Copyright (c) Foretellix Ltd. All Rights Reserved.
+# Auto-generated scenario with extended functionality
+
+scenario sut.ego_free_drive_auto_gen_base inherits free_drive_family_base:
+    keep(default scenario_str == "ego_free_drive_auto_gen_base")
+
+    # Road type selection parameter
+    # road_type: string
+    # keep(default road_type in ["one_way_road", "lane", "speed_limit_section", "road_with_opposite", 
+    #                           "road_with_facing_road", "road_with_sign", "road_with_merging_lane", 
+    #                           "slope_section", "road_curvature", "tunnel", "highway", "highway_entry", 
+    #                           "highway_exit", "highway_acceleration_lane", "merge_from_entry", "roundabout"])
+    
+    # Lane generation parameters
+    gen_min_lanes: int 
+    keep(gen_min_lanes >= 1)
+
+    gen_max_lanes: int
+    keep(default gen_max_lanes in ftlx_lib_base_config.default_max_num_of_lane_at_road_element)
+  
+    # Road element based on selected road type
+
+    #keep(default ego_road_element.max_lanes == gen_max_lanes)
+    #keep(default ego_road_element.min_lanes == gen_min_lanes)
+    
+    # Speed control parameters
+    # gen_ego_speed_at_start: speed
+    keep(default gen_ego_speed_at_start in [0..100]kph)
+    
+    gen_ego_speed_at_end: speed
+    keep(default gen_ego_speed_at_end in [0..100]kph)
+
+    gen_ego_lane_at_start: int
+    keep(default gen_ego_lane_at_start in [gen_min_lanes..gen_max_lanes])
+
+    gen_ego_lane_at_end: int
+    keep(default gen_ego_lane_at_end in [gen_min_lanes..gen_max_lanes])
+
+    # Time gap parameter
+    ego_time_gap_to_start_of_road_element: time
+    keep(default ego_time_gap_to_start_of_road_element in [0.1..15]s)
+
+    # Distance offset calculation
+    distance_offset: length with:
+      keep(default it in [gen_ego_speed_at_start * ego_time_gap_to_start_of_road_element
+        - 0.1m..gen_ego_speed_at_start * ego_time_gap_to_start_of_road_element + 0.1m])
+
+    # Speed tolerance parameter
+    ego_speed_at_essence_tolerance: speed with:
+        keep(default it == 3kph)
+
+    ego_driving_duration: time
+    keep(default ego_driving_duration in [0.1..100]s)
+        
+    # Collision avoidance parameter
+    avoid_collisions: bool
+    keep(default avoid_collisions == true)
+
+scenario sut.ego_free_drive_auto_gen_test inherits free_drive_family_base_test:
+    keep(default scenario_str == "ego_free_drive_auto_gen_base_test")

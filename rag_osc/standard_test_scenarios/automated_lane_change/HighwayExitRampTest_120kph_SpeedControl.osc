@@ -1,0 +1,41 @@
+# 测试场景: 单独出口
+# 描述: 测试高速行驶状态下单车驶出高速出口
+# 场景: 自车以120kph在高速路行驶,单独驶入出口匝道
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_highway_exit_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.solo_exit_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "solo_exit_test_run")
+    
+    # 高速出口
+    my_road: highway_exit
+
+    # 起始车道
+    lane_start: int with:
+        keep(lane_start in [1..2])
+    
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    do serial():
+        set_up: parallel():
+            # 自车高速行驶后驶入出口
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_highway_exit() with:
+                keep(it.gen_ego_speed_at_start == 120kph)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_ego_lane_at_start == lane_start)
+                keep(it.gen_ego_lane_at_end == lane_start + 1)
+                keep(it.ego_driving_duration in [2s..15s])
+
+extend top.main:
+    do sut.solo_exit_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "solo_exit_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

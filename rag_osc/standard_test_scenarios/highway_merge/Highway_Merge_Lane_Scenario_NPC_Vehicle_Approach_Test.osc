@@ -1,0 +1,58 @@
+# 测试场景: 相邻后方车辆
+# 描述: 测试相邻车道后方有高速接近车辆时的感知和响应
+# 场景: 自车在汇入车道,相邻车道后方有高速行驶的车辆快速接近
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_road_with_merging_lane_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.adjacent_rear_car_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "adjacent_rear_car_test_run")
+    
+    # 汇入车道
+    my_road: road_with_merging_lane
+
+    # 自车车道
+    ego_lane: int
+
+    # NPC车道 (相邻车道)
+    npc_lane: int with:
+        keep(it == ego_lane - 1)
+
+    # 行驶持续时间
+    driving_duration: time with:
+        keep(it in [5s..15s])
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    do serial():
+        set_up: parallel():
+            # 自车在汇入车道行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_road_with_merging_lane() with:
+                keep(it.gen_ego_speed_at_start in [20kph..80kph])
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_driving_duration == driving_duration)
+
+            # 相邻车道后方高速NPC车辆
+            npc_driving_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [-100m..-60m])
+                keep(it.npc_initial_speed in [60kph..80kph])
+                keep(it.npc_duration == driving_duration)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.adjacent_rear_car_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "adjacent_rear_car_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

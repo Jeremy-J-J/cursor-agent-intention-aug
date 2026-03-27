@@ -1,0 +1,54 @@
+# 测试场景: 左侧汇入
+# 描述: 测试自车从左侧车道汇入主路的能力
+# 场景: 多车道道路,自车需要从左侧汇入车道汇入主路,可能需要与主路车辆协作
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 主路配置
+    road_in: highway_entry
+    road_out: highway
+    
+    # 右弯道配置
+    road_curvature_right: road_curvature with:
+        keep(road_curvature_right.direction == right_curve)
+        keep(it.min_radius < 200m)
+    
+    # 内部道路配置
+    internal_road: internal_road_with_conflict
+
+    # 测试速度
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    # 日志事件
+    on @sut_drive_to.start:
+        call logger.log_info("internal_road.id: $(internal_road.id)")
+
+    do serial():
+        sut_to: parallel():
+            serial():
+                # 自车驶向路口
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(road_curvature_right, at: start)
+                    along(road_in, at: start)
+                    along(internal_road.conflicting_road, at: end)
+                    #along(internal_road, at: end)
+
+                # 自车驶离路口
+                sut_drive_leave: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(internal_road.conflicting_road, at: start)
+                    #along(internal_road, at: start)
+                    along(road_out, at: end)
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "car_left_merge_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

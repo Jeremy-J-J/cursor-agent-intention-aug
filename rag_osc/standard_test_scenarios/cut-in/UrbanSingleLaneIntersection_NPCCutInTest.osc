@@ -1,0 +1,96 @@
+# 场景: cut_in_test_run
+# 描述: 自车以40kph行驶,NPC车辆以10kph从相邻车道切入
+# 地图: M499_FTX_suburban.xodr (市郊)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_cut_in_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.cut_in_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cut_in_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+
+    # 自车车道 (1或2)
+    ego_lane: int with:
+        keep(it in [1, 2])
+    
+    # NPC初始车道 (相邻车道)
+    npc_initial_lane: int with:
+        keep(it >= 1)
+        keep(it in [ego_lane - 1, ego_lane + 1])
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 150m)
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 40kph)
+
+    # NPC车辆速度
+    npc_speed: speed with:
+        keep(default it == 10kph)
+
+    # NPC相对位置
+    npc_relative_position: length with:
+        keep(default it == 24.5m)
+
+    # 变道开始时间
+    lane_change_start_time: time with:
+        keep(default it in [0.1s..0.1s])
+
+    # 变道持续时间
+    lane_change_duration: time with:
+        keep(it >= 2.5s)
+
+    # 测试总持续时间
+    duration_time: time with:
+        keep(it >= lane_change_start_time + lane_change_duration + 5s)
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("ego_speed: $(ego_speed)")
+        call logger.log_info("npc_speed: $(npc_speed)")
+        call logger.log_info("npc_relative_position: $(npc_relative_position)")
+        call logger.log_info("lane_change_start_time: $(lane_change_start_time)")
+        call logger.log_info("lane_change_duration: $(lane_change_duration)")
+        call logger.log_info("duration_time: $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶阶段
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_max_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_driving_duration == duration_time)
+
+            # NPC切入阶段
+            npc_cut_in_phase: sut.npc_cut_in() with:
+                keep(it.npc_relative_position == self.npc_relative_position)
+                keep(it.npc_initial_speed == npc_speed)
+                keep(it.npc_target_speed == npc_speed)
+                keep(it.npc_initial_lane == self.npc_initial_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_cut_in_start_time == lane_change_start_time)
+                keep(it.npc_cut_in_duration == lane_change_duration)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.cut_in_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cut_in_test_run"
+    set additional_parameters.test_index = "auto_20251120_164500"

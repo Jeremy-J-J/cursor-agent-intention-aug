@@ -1,0 +1,14 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import "ego_free_drive_auto_gen_top.osc"
+import "ego_free_drive_auto_gen_road_with_merging_lane_h.osc"
+import "ego_free_drive_auto_gen_road_with_merging_lane_imp.osc"

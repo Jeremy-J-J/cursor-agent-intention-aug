@@ -1,0 +1,89 @@
+# 场景: bsd_c2c_test_run
+# 描述: 三车道道路,自车在车道1,NPC从车道3变道至车道2(自车盲区)
+# 地图: M499_FTX_suburban.xodr (市郊)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_cut_in_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.bsd_c2c_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "bsd_c2c_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 150m)
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 50kph)
+
+    # NPC速度
+    npc_speed: speed with:
+        keep(default it == 50kph)
+
+    # NPC相对位置 (负值表示在自车后方)
+    npc_relative_position: length with:
+        keep(default it in [-10m..0m])
+
+    # 变道开始时间
+    lane_change_start_time: time with:
+        keep(default it in [3s..5s])
+
+    # 变道持续时间
+    lane_change_duration: time with:
+        keep(default it in [3s..5s])
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(it >= lane_change_start_time + lane_change_duration + 3s)
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("ego_speed: $(ego_speed)")
+        call logger.log_info("npc_speed: $(npc_speed)")
+        call logger.log_info("npc_relative_position: $(npc_relative_position)")
+        call logger.log_info("lane_change_start_time: $(lane_change_start_time)")
+        call logger.log_info("lane_change_duration: $(lane_change_duration)")
+        call logger.log_info("duration_time: $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车在车道1行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 3)
+                keep(it.gen_max_lanes == 3)
+                keep(it.gen_ego_lane_at_start == 1)
+                keep(it.gen_ego_lane_at_end == 2)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # NPC从车道3变道至车道2
+            npc_cut_in_phase: sut.npc_cut_in() with:
+                keep(it.npc_relative_position == self.npc_relative_position)
+                keep(it.npc_initial_speed == npc_speed)
+                # keep(it.npc_target_speed == npc_speed)
+                keep(it.npc_initial_lane == 3)
+                keep(it.npc_target_lane == 2)
+                keep(it.npc_cut_in_start_time == lane_change_start_time)
+                keep(it.npc_cut_in_duration == lane_change_duration)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.bsd_c2c_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "bsd_c2c_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

@@ -1,0 +1,50 @@
+# 场景: block_cross_test_run
+# 描述: 自车正常行驶时,前方40米处有一辆横向停放的轿车阻挡道路
+# 地图: M499_FTX_suburban.xodr (市郊)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.block_cross_test_run inherits project_base_scenario:
+    # 横向停放的车辆
+    parking: stationary_vehicle with:
+        keep(it.vehicle_category == sedan)
+
+    npc_lon_offset: length with:
+        keep(it in [20m..40m])
+    
+    # 停放车辆的位置
+    my_position: msp_position
+    position_along_drive(
+        my_position, 
+        sut_drive, 
+        path_fraction: 0, 
+        lon_offset: npc_lon_offset, 
+        lat_offset: 0m
+    )
+
+    # 测试持续时间范围
+    test_duration: time with:
+        keep(it in [3s..10s])
+
+    do parallel(duration: test_duration):
+        # 自车正常行驶
+        sut_drive: sut.car.drive() with:
+            speed(60kph, at: start)
+        
+        # 停放车辆存在于指定位置,横向旋转90度
+        parking.exists_at(my_position) with:
+            rotation(yaw: 90deg)
+
+extend top.main:
+    do sut.block_cross_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "block_cross_test_run"
+    set additional_parameters.test_index = "auto_20251128_000001"

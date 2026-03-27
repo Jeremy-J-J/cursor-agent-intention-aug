@@ -1,0 +1,67 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+extend sut.npc_free_driving_opposite:
+
+    # Event handlers
+    on @phase_essence.start: 
+        call logger.log_info("Starting NPC driving behavior scenario")
+        call logger.log_info("NPC vehicle type: $(npc_vehicle_type)")
+        call logger.log_info("NPC initial speed: $(npc_initial_speed)")
+        call logger.log_info("NPC target speed: $(npc_target_speed)")
+        # call logger.log_info("NPC driving direction: $(npc_driving_direction)")
+
+    #opposite_position: msp_position
+    #position_along_drive(opposite_position, ref_car, path_fraction: 40)
+
+    # Main scenario implementation
+    do phase_essence: serial():
+        # Drive ego vehicle
+        # location: npc_car.exists_at(opposite_position)
+        drive_ego_at_essence: npc_car.drive() with:
+
+            # Apply collision avoidance if enabled
+            # avoid_collisions(default avoid_collisions)
+            
+            # Set initial speed at start
+            intent_assist_ego_speed_at_essence: speed(npc_initial_speed, at: start, run_mode: best_effort)
+            
+            # Adjust speed at end
+            intent_assist_ego_speed_at_end: speed(npc_target_speed, at: end, run_mode: best_effort)
+
+            # Set initial lane at start
+            # intent_assist_ego_lane_at_essence_start: lane(gen_ego_lane_at_start, at: start, run_mode: best_effort)
+
+            # Adjust lane at end
+            # intent_assist_ego_lane_at_essence_end: lane(gen_ego_lane_at_end, at: end, run_mode: best_effort)
+
+            # intent_assist_ego_positioni_at_essence: position(npc_relative_position_x, ahead_of: ref_car, at: start)
+
+            intent_assist_ego_lane_at_essence: along(road_element.opposite, 
+                end_offset: npc_start_offset, at: start)
+
+            # Maintain distance offset
+            intent_assist_ego_distance_at_essence: distance(npc_distance_to_ego, run_mode: best_effort)
+
+
+# Test scenario implementation
+extend sut.npc_free_driving_oppsite_test:
+
+    do phase_test: serial():
+
+        # Invoke the default base ego warm up scenario for the free_drive family
+        phase_ego_warm_up: free_drive_family_base_ego_warm_up()
+
+        # Invoke npc_driving_behavior_base scenario
+        # phase_scenario: npc_driving_behavior_base()
+
+        # Invoke the default base post scenario for the free_drive family
+        phase_post: free_drive_family_base_post()

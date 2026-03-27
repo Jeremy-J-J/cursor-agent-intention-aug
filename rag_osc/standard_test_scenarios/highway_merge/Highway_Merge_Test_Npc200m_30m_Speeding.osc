@@ -1,0 +1,77 @@
+# 场景: gap_merge_test_run
+# 描述: 自车在汇入车道,相邻车道有两辆高速行驶的NPC车辆,需要找到两车之间的间隙汇入
+# 地图: M56_FTX_highway_prague.xodr (高速公路)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_road_with_merging_lane_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.gap_merge_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "gap_merge_test_run")
+    
+    # 汇入车道
+    my_road: road_with_merging_lane
+
+    # 第一辆NPC相对位置
+    first_npc_relative_position: length with:
+        keep(it in [-10m..0m])
+
+    # 第二辆NPC相对位置
+    second_npc_relative_position: length with:
+        keep(it in [first_npc_relative_position - 150m..first_npc_relative_position - 20m])
+
+    # 自车车道
+    ego_lane: int
+
+    # NPC车道
+    npc_lane: int with:
+        keep(it == ego_lane - 1)
+
+    # 行驶持续时间
+    driving_duration: time with:
+        keep(it in [5s..15s])
+
+    # NPC速度 (较高速度)
+    npc_speed: speed with:
+        keep(it in [60kph..80kph])
+    
+    do serial():
+        set_up: parallel():
+            # 自车在汇入车道行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_road_with_merging_lane() with:
+                keep(it.gen_ego_speed_at_start in [20kph..80kph])
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_driving_duration == driving_duration)
+
+            # 第一辆NPC车辆
+            npc_1_driving_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == first_npc_relative_position)
+                keep(it.npc_initial_speed == npc_speed)
+                keep(it.npc_duration == driving_duration)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.ref_car == sut.car)
+
+            # 第二辆NPC车辆
+            npc_2_driving_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == second_npc_relative_position)
+                keep(it.npc_initial_speed == npc_speed)
+                keep(it.npc_duration == driving_duration)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.gap_merge_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "gap_merge_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token-Aware Chat App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .chat-container {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+            background-color: #fafafa;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            text-align: right;
+        }
+        .ai-message {
+            background-color: #f5f5f5;
+        }
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        .token-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 15px;
+            text-align: center;
+        }
+        .new-conversation-btn {
+            background-color: #34a853;
+            margin-bottom: 15px;
+        }
+        .new-conversation-btn:hover {
+            background-color: #2e8b46;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Token-Aware Chat Application</h1>
+        
+        <button class="new-conversation-btn" onclick="newConversation()">New Conversation</button>
+        
+        <div id="tokenInfo" class="token-info">
+            Tokens: <span id="tokenCount">0</span> | Messages: <span id="messageCount">0</span>
+        </div>
+        
+        <div id="chatContainer" class="chat-container">
+            <!-- Messages will appear here -->
+        </div>
+        
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        let currentConversationId = null;
+        
+        // Initialize with a new conversation
+        window.onload = function() {
+            newConversation();
+        };
+        
+        function newConversation() {
+            fetch('/new_conversation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                currentConversationId = data.conversation_id;
+                updateTokenInfo();
+                addMessage('System', 'New conversation started', 'ai-message');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error starting new conversation');
+            });
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to UI
+            addMessage('You', message, 'user-message');
+            input.value = '';
+            
+            // Send to server
+            fetch('/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: message,
+                    conversation_id: currentConversationId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    addMessage('Error', data.error, 'ai-message');
+                } else {
+                    addMessage('AI', data.response, 'ai-message');
+                    updateTokenInfo();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                addMessage('Error', 'Failed to send message', 'ai-message');
+            });
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function addMessage(sender, text, className) {
+            const container = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${className}`;
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateTokenInfo() {
+            if (!currentConversationId) return;
+            
+            fetch(`/token_info/${currentConversationId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('tokenCount').textContent = data.token_count;
+                document.getElementById('messageCount').textContent = data.message_count;
+            })
+            .catch(error => {
+                console.error('Error updating token info:', error);
+            });
+        }
+        
+        // Update token info periodically
+        setInterval(updateTokenInfo, 5000);
+    </script>
+</body>
+</html>

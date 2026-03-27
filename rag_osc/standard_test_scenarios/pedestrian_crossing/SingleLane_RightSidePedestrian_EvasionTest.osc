@@ -1,0 +1,92 @@
+# 测试场景: 行人无避让穿越 (CPNA - Crossing Pedestrian No Avoidance)
+# 描述: 测试行人沿道路移动时的避让行为
+# 场景: 自车行驶中,行人以6.5kph沿最右侧车道移动
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/crossing_VRU/vru_crossing/vru_crossing_pedestrian_no_wait_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.cpna_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cpna_test_run")
+    
+    # 测试道路
+    road: one_way_road
+    
+    # VRU行人
+    vru: person
+
+    # 起始和结束位置
+    start_position: msp_position
+    end_position: msp_position
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= road.length - 100m)
+
+    # 自车起始速度
+    start_speed: speed with:
+        keep(default it in [20kph, 30kph, 40kph, 50kph, 60kph, 70kph, 80kph])
+
+    # VRU起始偏移
+    vru_start_offset: length with:
+        keep(it in [start_speed * 1s + 5m..start_speed * 1s + 10m])
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(it >= vru_start_offset / start_speed + 2s)
+        keep(it <= 3 * vru_start_offset / start_speed + 2s)
+
+    lat_offset: length with:
+        keep(it in [vru_start_offset / start_speed * 6.5kph - 1m..vru_start_offset / start_speed * 6.5kph + 1m])
+
+
+    # VRU起始位置 (最右侧车道)
+    position_along_road(
+        start_position, 
+        road, 
+        lon_offset: start_offset + vru_start_offset,
+        lat_offset: -lat_offset, 
+        rightmost_lane: true
+    )
+    
+    # VRU结束位置
+    position_along_road(
+        end_position, 
+        road, 
+        lon_offset: start_offset + vru_start_offset, 
+        lat_offset: duration_time * 6.5kph - lat_offset, 
+        rightmost_lane: true
+    )
+    
+    on @set_up.start:
+        call logger.log_info("start_speed: $(start_speed)")
+        call logger.log_info("vru_start_offset: $(vru_start_offset)")
+        call logger.log_info("duration_time: $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == start_speed)
+                keep(it.ego_road_element == road)
+                keep(it.gen_min_lanes == 1)
+                keep(it.gen_max_lanes == 2)
+                keep(it.gen_ego_lane_at_start == 1)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # VRU沿道路移动
+            vru.move(end_position, start_position, duration: duration_time)
+
+extend top.main:
+    do sut.cpna_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cpna_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

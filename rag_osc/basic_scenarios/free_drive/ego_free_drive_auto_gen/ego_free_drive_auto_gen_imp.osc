@@ -1,0 +1,81 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+extend sut.ego_free_drive_auto_gen_base:
+
+    def car_place_lane(car: vehicle)-> int is:
+        # if car.state ==null or car.state.msp_pos == null or \
+        #     car.state.msp_pos.lane_position == null or \
+        #         car.state.msp_pos.lane_position.lane == null:
+        #     return -1 #或者按你需要的缺省值
+        #return car.state.msp_pos.lane_position.lane.index_in_road
+        return car.state.msp_pos.lane_position.lane.index_in_road-car.state.msp_pos.road_position.road.lanes.size()+1
+
+    # Connect @phase_essence.start implementation to the base event phase_essence_start_event
+    # on @phase_essence.start: emit phase_essence_start_event 
+        # if road_type == "one_way_road":
+        #     var ego_road_element: one_way_road
+        #     #set ego_road_element = one_way_road
+        # elif road_type == "lane":
+        #     var ego_road_element: lane
+        #     #set ego_road_element = lane
+        # else:
+        #     var ego_road_element: road_curvature
+        #     #lsset ego_road_element = road_curvature
+
+    # else if road_type == "lane":
+    #     ego_road_element: lane 
+    # Connect @phase_essence.end implementation to the base event phase_essence_end_event
+    # on @phase_essence.end: emit phase_essence_end_event
+
+    # on @phase_essence.start: 
+    #     call logger.log_info("logging from base")
+
+    # do phase_essence: serial():
+
+    #     drive_ego_at_essence: sut.car.drive() with:
+    #         # Apply collision avoidance if enabled
+    #         avoid_collisions(default avoid_collisions)
+    #         # keep(if avoid_collisions then apply_collision_avoidance())
+            
+    #         # Set initial speed at start
+    #         intent_assist_ego_speed_at_essence: speed(gen_ego_speed_at_start, at: start, run_mode: best_effort)
+            
+    #         # Adjust speed at end
+    #         intent_assist_ego_speed_at_end: speed(gen_ego_speed_at_end, at: end, run_mode: best_effort)
+            
+    #         # set inital lane at start
+    #         intent_assist_ego_lane_at_essence_start: lane(gen_ego_lane_at_start, at: start, run_mode: best_effort)
+
+    #         # adjust lane at end
+    #         intent_assist_ego_lane_at_essence_end: lane(gen_ego_lane_at_end, at: end, run_mode: best_effort)
+
+    #         # Drive along the specified road element type
+    #         # intent_assist_ego_along_at_essence: along(ego_road_element, run_mode: best_effort)
+            
+    #         # Maintain distance offset
+    #         intent_assist_ego_distance_at_essence: distance(distance_offset, run_mode: best_effort) 
+
+# ego_free_drive_auto_gen_test scenario implementation
+# scenario invokes serially ego warm up, ego_free_drive_auto_gen and then the post scenarios
+extend sut.ego_free_drive_auto_gen_test:
+    pass
+
+#     do phase_test: serial():
+
+#         # invoke the default base ego warm up scenario for the free_drive family
+#         phase_ego_warm_up: free_drive_family_base_ego_warm_up()
+
+#         # invoke ego_free_drive_auto_gen scenario
+#         phase_scenario: ego_free_drive_auto_gen_base()
+
+#         # invoke the default base post scenario for the free_drive family
+#         phase_post: free_drive_family_base_post()

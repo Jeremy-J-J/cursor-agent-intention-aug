@@ -1,0 +1,82 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Implementation file for cyclist crossing instance
+
+extend sut.vru_crossing_cyclist:
+    # Calculate positions based on parameters
+    trigger_time: time
+    lon_offset: length with:
+        keep(default it == 0m)
+        
+    keep(default trigger_time in [2..5]second)
+    
+    # Distance between cyclist initial placement and reference vehicle's trajectory.
+    distance_to_trajectory: length with:
+        keep(it == gen_cyclist_lateral_distance)
+        
+    # Used for synchronizing when the cyclist reaches
+    # the vehicle trajectory when it is planned to reach the cyclist
+    keep(distance_to_trajectory / gen_cyclist_speed 
+        in [trigger_time-0.5s..trigger_time+0.5s])
+
+    # If Ego is slower than standstill_threshold for longer than time_delay,
+    # The scenario will end.
+    time_delay: time with:
+        keep(default it == 10s)
+    
+    standstill_threshold: speed with:
+        keep(default it == 0.25mps)
+
+    # The Event checks the following:
+    # 1. Ego's speed is less than standstill_threshold
+    # 2. Ego's previous state was not null and also prev state speed 
+    # was greater than standstill_threshold to ensure that timer should reset if Ego 
+    # speed goes above standstill_threshold after slowing.
+    event ego_stopped_event is @top.clk if (sut.car.state.speed < standstill_threshold \
+        and sut.car.prev_state != null 
+        and sut.car.prev_state.speed > standstill_threshold)
+    var ego_stopped_time: time = sample(top.time, @ego_stopped_event)
+    var ego_stopped_bool: bool = sample(true, @ego_stopped_event)
+    set ego_stopped_bool = false
+
+    # Ego stopped event
+    # Checks if Ego is slower than standstill_threshold for a delay of 'time_delay'
+    event ego_standing_still is @top.clk if (ego_stopped_bool == true and top.time \
+        > (ego_stopped_time + time_delay))
+
+    # Event to reset the timer once Ego speeds up after slowing down
+    event ego_stops_and_moves is @top.clk if (sut.car.state.speed > standstill_threshold \
+        and sut.car.prev_state != null 
+        and sut.car.prev_state.speed < standstill_threshold)
+    
+    on @ego_stops_and_moves:
+        set ego_stopped_time = 0s
+        set ego_stopped_bool = false
+
+    # Sample longitudinal distance (in seconds) between SUT and cyclist
+    var time_to_meet: time = sample(
+        (sut.car.state == null or sut.car.state.speed == 0kph) ? 10000s :
+            (vru_longitudinal_distance / sut.car.state.speed),
+        @top.clk)
+    set time_to_meet = 10000s
+    
+    event move_trigger_event is @top.clk if (time_to_meet < trigger_time or ego_standing_still.event_occurred() == true)
+    
+    # Position cyclists based on parameters
+    # This would typically involve positioning logic based on the parameters
+    # For now, we'll define the basic structure
+    
+    do phase_essence: serial():
+        move_trigger: wait @move_trigger_event
+        # Cyclist movement logic would go here
+        # For each cyclist in the group:
+        # cyclist_group_move_at_essence: cyclist_group.group_move(duration: gen_cyclist_crossing_time)

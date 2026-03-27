@@ -1,0 +1,105 @@
+# 测试场景: 后方穿越
+# 描述: 测试前车启动时行人从后方穿越的避让
+# 场景: 自车以30kph跟随前车,前车停止1.5秒后以20kph启动,此时行人从右侧5kph穿越
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/crossing_VRU/vru_crossing/vru_crossing_pedestrian_no_wait_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.rear_cross_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "rear_cross_test_run")
+
+    # 测试道路
+    my_road: one_way_road
+    
+    # 自车车道
+    ego_lane: int with:
+        keep(it >= 1)
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 150m)
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 30kph)
+
+    # 前车距离
+    lead_car_distance: length with:
+        keep(default it == 25m)
+
+    # 前车启动时间
+    lead_car_start_up_time: time with:
+        keep(default it == 1.5s)
+
+    # 前车目标速度
+    lead_car_target_speed: speed with:
+        keep(default it == 20kph)
+
+    # 行人速度
+    pedestrian_speed: speed with:
+        keep(default it == 5kph)
+
+    # VRU穿越方向
+    vru_side: av_side with:
+        keep(default it == right)
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(default it == 12s)
+        keep(it >= lead_car_start_up_time + 8s)
+
+    on @set_up.start:
+        call logger.log_info("Ego speed: $(ego_speed)")
+        call logger.log_info("Lead-car gap: $(lead_car_distance)")
+        call logger.log_info("Lead-car start at: $(lead_car_start_up_time)")
+        call logger.log_info("Ped speed: $(pedestrian_speed)")
+        call logger.log_info("Scenario duration: $(duration_time)")
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    do serial():
+        set_up: parallel():
+            # 自车行驶
+            ego_drive: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # 前车停止后启动
+            lead_car: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == lead_car_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == lead_car_target_speed)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_start_time == lead_car_start_up_time)
+                keep(it.npc_duration == duration_time - lead_car_start_up_time)
+                keep(it.ref_car == sut.car)
+
+            # 行人穿越
+            vru_cross: sut.vru_crossing_pedestrian_no_wait() with:
+                keep(it.gen_pedestrian_longitudinal_distance == start_offset + lead_car_distance - 5m)
+                keep(it.gen_pedestrian_lateral_distance == 3m)
+                keep(it.gen_pedestrian_speed == pedestrian_speed)
+                keep(it.gen_number_of_pedestrians == 1)
+                keep(it.move_from == vru_side)
+                keep(it.up_coming_car == sut.car)
+                keep(it.my_road == self.my_road)
+
+extend top.main:
+    do sut.rear_cross_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "rear_cross_test_run"
+    set additional_parameters.test_index = "auto_20251127_000001"

@@ -1,0 +1,66 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M781_FTX_Roundabout_4_Legs.xodr"
+
+extend top.main:
+    # 环岛同步场景定义
+    round_entry: roundabout_entry
+    round_exit: roundabout_exit
+    round_whole: roundabout_from_entry
+    round_end: roundabout_from_entry
+
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_rear: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    ego_offset: length with:
+        keep(ego_offset <= round_whole.length - 5m)
+
+    npc_f_offset: length with:
+        keep(it in [ego_offset-50m..ego_offset-10m])
+        keep(it >= 0m)
+
+    npc_r_offset: length with:
+        keep(it in [ego_offset+10m..ego_offset+50m])
+        keep(it <= round_whole.length - 5m)
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.enable == true)
+
+    # 日志输出
+    on @sut_to.start:
+        call logger.log_info("round_entry.id: $(round_entry.id)") 
+
+    do serial():
+        sut_to: parallel():
+            # 自车：在环岛内行驶
+            serial():
+                phase1: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(round_whole, at: start, end_offset: ego_offset) 
+                    along(round_end, at: end)
+                    lane(rightmost: true)
+                    keep_speed(run_mode: best_effort)
+
+            # 后车：在环岛内行驶（位于自车后方）
+            serial():
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(round_whole, at: start, end_offset: npc_r_offset)
+                    along(round_end, at: end)
+                    lane(rightmost: true)
+                    keep_speed()
+
+            # 前车：在环岛内行驶（位于自车前方）
+            serial():
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(rightmost: true)
+                    along(round_whole, at: start, start_offset: npc_f_offset)
+                    along(round_end, at: end)
+                    keep_speed()

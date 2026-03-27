@@ -1,0 +1,156 @@
+# 测试场景: 卡车缓行
+# 描述: 测试前方大型车辆缓慢行驶且反复加减速时的跟随行为
+# 场景: 三车道道路,前方有卡车缓行并反复加减速,两侧车道有车辆,自车需要安全跟随或超车
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.truck_crawl_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "truck_crawl_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+    
+    # 前方卡车
+    lead_truck: vehicle
+    keep(lead_truck.vehicle_category == box_truck)
+    
+    # 两侧车辆
+    left_car: vehicle
+    right_car: vehicle
+    
+    # 自车车道
+    ego_lane: int with:
+        keep(it >= 1)
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 200m)
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it in [30kph..50kph])
+
+    # 前方卡车距离
+    lead_truck_distance: length with:
+        keep(default it in [20m..30m])
+
+    # 左侧车辆距离
+    left_vehicle_distance: length with:
+        keep(default it in [15m..25m])
+    
+    # 右侧车辆距离
+    right_vehicle_distance: length with:
+        keep(default it in [15m..25m])
+
+    # 两侧车辆速度
+    side_vehicle_speed: speed with:
+        keep(default it == 10kph)
+
+    # 卡车各阶段持续时间
+    truck_phase1_duration: time with:
+        keep(default it in [2s..3s])
+    
+    truck_phase2_duration: time with:
+        keep(default it in [2s..3s])
+    
+    truck_phase3_duration: time with:
+        keep(default it in [2s..3s])
+    
+    truck_phase4_duration: time with:
+        keep(default it in [2s..3s])
+
+    # 总持续时间
+    total_duration: time with:
+        keep(it >= truck_phase1_duration + truck_phase2_duration + 
+             truck_phase3_duration + truck_phase4_duration + 2s)
+        keep(default it == 15s)
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("Ego speed:              $(ego_speed)")
+        call logger.log_info("Ego lane:               $(ego_lane)")
+        call logger.log_info("Lead truck distance:    $(lead_truck_distance)")
+        call logger.log_info("Side vehicle speed:     $(side_vehicle_speed)")
+        call logger.log_info("Scenario duration:      $(total_duration)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 3)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.gen_ego_lane_at_end == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == total_duration)
+
+            # 左侧车道车辆
+            left_vehicle_driving: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [5m..10m])
+                keep(it.npc_initial_speed == ego_speed)
+                keep(it.npc_target_speed == ego_speed)
+                keep(it.npc_duration == total_duration)
+                keep(it.npc_initial_lane == ego_lane - 1)
+                keep(it.npc_target_lane == ego_lane - 1)
+                keep(it.ref_car == sut.car)
+
+            # 右侧车道车辆
+            right_vehicle_driving: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [5m..10m])
+                keep(it.npc_initial_speed == ego_speed)
+                keep(it.npc_target_speed == ego_speed)
+                keep(it.npc_duration == total_duration)
+                keep(it.npc_initial_lane == ego_lane + 1)
+                keep(it.npc_target_lane == ego_lane + 1)
+                keep(it.ref_car == sut.car)
+
+            # 前方卡车反复加减速
+            lead_truck_stop_go: serial():
+                # 阶段1: 低速行驶
+                truck_phase1: lead_truck.drive() with:
+                    position(lead_truck_distance, ahead_of: sut.car, at: start)
+                    lane(0, same_as: sut.car, at: start)
+                    speed(10kph, at: start)
+                    keep_speed()
+                    keep_lane()
+                    duration(truck_phase1_duration)
+                
+                # 阶段2: 减速
+                truck_phase2: lead_truck.drive() with:
+                    change_speed(-7kph)
+                    keep_lane()
+                    duration(truck_phase2_duration)
+                
+                # 阶段3: 保持低速
+                truck_phase3: lead_truck.drive() with:
+                    keep_speed()
+                    keep_lane()
+                    duration(truck_phase3_duration)
+                
+                # 阶段4: 加速
+                truck_phase4: lead_truck.drive() with:
+                    change_speed(7kph)
+                    keep_lane()
+                    duration(truck_phase4_duration)
+                
+                # 阶段5: 保持速度
+                truck_phase5: lead_truck.drive() with:
+                    keep_speed()
+                    keep_lane()
+
+extend top.main:
+    do sut.truck_crawl_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "truck_crawl_test_run"
+    set additional_parameters.test_index = "auto_20251127_000003"

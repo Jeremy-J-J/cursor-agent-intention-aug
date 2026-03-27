@@ -1,0 +1,57 @@
+# 测试场景: 车到车右侧汇入 (CCRM - Car-to-Car Right Merge)
+# 描述: 测试前方有缓行车辆时的跟随和超车决策
+# 场景: 自车行驶中,前方20-50米处有以20kph缓行的车辆
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.ccrm_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "ccrm_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+
+    ego_lane: int 
+
+    # 自车起始速度
+    start_speed: speed with:
+        keep(default it in [20kph, 30kph, 40kph, 50kph, 60kph, 70kph, 80kph])
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == start_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 1)
+                keep(it.gen_max_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_driving_duration == 15s)
+
+            # 前方缓行NPC车辆
+            npc_driving_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [20m..50m])
+                keep(it.npc_initial_speed == 20kph)
+                keep(it.npc_target_speed == 20kph)
+                keep(it.gen_min_lanes == 1)
+                keep(it.gen_max_lanes == 2)
+                keep(it.npc_duration == 15s)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.ccrm_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "ccrm_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

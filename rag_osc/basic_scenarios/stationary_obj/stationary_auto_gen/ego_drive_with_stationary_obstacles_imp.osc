@@ -1,0 +1,65 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+##############################################################################
+# Implementation file for ego_drive_with_stationary_obstacles scenario
+##############################################################################
+
+# import "$FTX_PACKAGES/base_scenarios/common/metrics_checks/object_scenario_stopper.osc"
+
+extend sut.ego_drive_with_stationary_obstacles:
+
+    # Defines the type of object, including cyclist, person, puddle, stationary_vehicle, traffic_cone and trailer. 
+    # This type can be extended depending on what types are supported by the simulator.
+
+    # keep(soft gen_stationary_obect_kind == stationary_vehicle) 
+    # record(gen_stationary_obect_kind, event: start)
+
+    stationary_object: plain_object with:
+        keep(default it.kind == gen_stationary_obect_kind)
+
+    #keep(default gen_stationary_vehicle_category == sedan)
+    # record(gen_stationary_vehicle_category, event: start)
+
+    #keep(gen_stationary_obect_kind == stationary_vehicle => stationary_object.as(stationary_vehicle).vehicle_category == gen_stationary_vehicle_category)
+
+    # The stationed object group offset attributes
+    keep(default obstacle_lon_offset in [30..50]m)
+    #keep(default obstacle_2_lon_offset in [60..80]m)
+    
+    keep(default obstacle_lat_offset in [-2..-1]m)
+    #keep(default obstacle_2_lat_offset in [-4..-3]m)
+
+    keep(ref_car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+    # gen_stationary_object_reference_drive_fraction: uint with:
+    #     keep(default it in [10..80])
+
+    # position_along_road(stationary_object_positon, 
+    #                     ref_road, lon_offset: ref_car_offset + obstacle_lon_offset, 
+    #                     lat_offset: obstacle_lat_offset,
+    #                     rightmost_lane: true)
+
+
+    # position_along_drive(stationary_object_positon,
+    #     ref_drive, 
+    #     path_fraction: gen_stationary_object_reference_drive_fraction, 
+    #     relative_lane_offset: object_relative_lane_offset,
+    #     lon_offset: obstacle_lon_offset,
+    #     lat_offset: obstacle_lat_offset)
+            # In this phase the Ego approaches the stationary_obstacle_group_1, 
+            # placed along its path and stationary_obstacle_group_2, which is 
+            # placed along the oncoming road
+
+    #vru: person
+    #do phase_essence_ego_drive_along_stationary_obstacles: vru.exists_at(stationary_object_positon)
+                
+    do phase_essence_ego_drive_along_stationary_obstacles: stationary_object.exists_at(stationary_object_positon)
+                

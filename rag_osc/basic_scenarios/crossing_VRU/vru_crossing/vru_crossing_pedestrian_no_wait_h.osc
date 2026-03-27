@@ -1,0 +1,72 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Instance scenario for pedestrian crossing based on vru_crossing_base
+# This scenario focuses on pedestrian crossing with configurable parameters
+
+scenario sut.vru_crossing_pedestrian_no_wait inherits vru_crossing_base:
+    keep(default scenario_str == "vru_crossing_pedestrian_no_wait")
+    
+    up_coming_car: vehicle
+    # Override to have only pedestrians in this instance
+    keep(gen_number_of_pedestrians in [1..5])
+    # keep(gen_number_of_cyclists == 1)
+    
+    # Specific parameters for pedestrian crossing
+    gen_pedestrian_crossing_direction: angle
+    keep(gen_pedestrian_crossing_direction in [70..110]degree or 
+        gen_pedestrian_crossing_direction in [250..290]degree)
+         
+    gen_pedestrian_longitudinal_distance: length
+    keep(default gen_pedestrian_longitudinal_distance in [10..50]m)
+
+    
+    #var meet_time:= gen_pedestrian_longitudinal_distance/up_coming_car.state.speed
+    #var meet_distance := meet_time*gen_pedestrian_speed
+    # Position relative to ego vehicle
+    gen_pedestrian_lateral_distance: length 
+    #keep(default gen_pedestrian_lateral_distance in [5..20]m)
+    keep(default gen_pedestrian_lateral_distance/gen_pedestrian_speed in \
+         [gen_pedestrian_longitudinal_distance/up_coming_car.state.speed-0.5s \
+         ..gen_pedestrian_longitudinal_distance/up_coming_car.state.speed+0.5s]) 
+
+    # keep(gen_pedestrian_lateral_distance in [meet_distance-1m..meet_distance+1m])
+
+    # total_longtitudinal_offset: length
+    # keep(default total_longtitudinal_offset == up_coming_car.state.msp_pos.road_position.lon_offset + gen_pedestrian_longitudinal_distance)
+
+    keep(default move_from == left)
+    gen_pedestrian_lateral_final: length
+    keep(move_from == left => gen_pedestrian_lateral_final == gen_pedestrian_lateral_distance)
+    keep(move_from == right => gen_pedestrian_lateral_final == -gen_pedestrian_lateral_distance)
+
+
+    # Timing of crossing
+    gen_pedestrian_crossing_time: time
+    keep(default gen_pedestrian_crossing_time == gen_pedestrian_lateral_distance/gen_pedestrian_speed*2)
+
+    junction: roads_follow_in_junction
+
+    my_road: one_way_road
+
+# Main scenario for pedestrian crossing
+scenario sut.vru_crossing_pedestrian_main inherits vru_crossing_base_main:
+    keep(default scenario_str == "vru_crossing_pedestrian_main")
+
+# # Ego warm-up scenario for pedestrian crossing
+# scenario sut.vru_crossing_pedestrian_ego_warm_up inherits vru_crossing_base_ego_warm_up:
+#     keep(default scenario_str == "vru_crossing_pedestrian_ego_warm_up")
+#     keep(gen_number_of_cyclists == 0)
+
+# # Post scenario for pedestrian crossing
+# scenario sut.vru_crossing_pedestrian_post inherits vru_crossing_base_post:
+#     keep(default scenario_str == "vru_crossing_pedestrian_post")
+#     keep(gen_number_of_cyclists == 0)

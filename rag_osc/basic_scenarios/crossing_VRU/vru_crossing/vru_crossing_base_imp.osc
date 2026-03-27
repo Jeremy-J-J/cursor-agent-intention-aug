@@ -1,0 +1,30 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Implementation file for VRU crossing base scenario
+
+extend sut.vru_crossing_base_ego_warm_up:
+ 
+    do phase_ego_warm_up: parallel(overlap: equal):
+        drive_ego_at_ego_warm_up: sut.car.drive() with:
+            intent_assist_ego_keep_lane_at_ego_warm_up: keep_lane(run_mode: best_effort)        
+    with:
+        intent_warm_up_duration: duration(gen_duration_at_ego_warm_up, tolerance: gen_duration_tolerance_at_ego_warm_up)
+     
+extend sut.vru_crossing_base_post:  
+    drive_road: one_way_road 
+     
+    do phase_post: parallel(overlap: equal):
+        drive_ego_at_post: sut.car.drive() with:
+            intent_assist_ego_keep_lane_at_post: keep_lane(run_mode: best_effort)
+            intent_assist_ego_keep_speed_at_post: keep_speed(run_mode: best_effort)
+    with: 
+        intent_post_duration: duration(gen_duration_at_post, tolerance: gen_duration_tolerance_at_post)

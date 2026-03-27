@@ -1,0 +1,65 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M781_FTX_Roundabout_4_Legs.xodr"
+
+extend top.main:
+    # 环岛入口场景定义
+    round_entry: roundabout_entry
+    round_exit: roundabout_exit
+    round_whole: roundabout_from_entry
+    out_road: one_way_road
+    internal_road: internal_road_with_conflict
+
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_rear: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    ego_offset: length with:
+        keep(ego_offset <= round_entry.length - 5m)
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.enable == true)
+
+    # 日志输出
+    on @sut_to.start:
+        call logger.log_info("round_entry.id: $(round_entry.id)") 
+        call logger.log_info("internal_road.conflicting_road_id: $(internal_road.conflicting_road_id)") 
+        call logger.log_info("out_road.id: $(out_road.id)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：进入环岛并绕行
+            serial():
+                # 阶段1：从环岛入口进入，经过内部道路，到达出口道路
+                phase1: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(round_entry, at: start, end_offset: ego_offset)
+                    along(internal_road, at: start)
+                    along(out_road, at: end, run_mode: best_effort)
+
+                # 阶段2：在环岛内绕行
+                phase2: sut.car.drive() with:  
+                    along(round_whole)
+                    keep_speed()
+
+            # 后车：在冲突道路上行驶，汇入出口道路
+            serial():
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(internal_road.conflicting_road, at: start, end_offset: [10m+ego_offset..50m+ego_offset])
+                    along(out_road, at: end, run_mode: best_effort)
+                    lane(rightmost: true)
+                    keep_speed()
+
+            # 前车：在出口道路上行驶
+            serial():
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(rightmost: true)
+                    along(out_road, at: start, start_offset: [10m+ego_offset-round_entry.length..50m+ego_offset-round_entry.length])
+                    keep_speed()

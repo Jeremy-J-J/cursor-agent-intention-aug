@@ -1,0 +1,141 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Implementation file for pedestrian crossing instance
+
+extend sut.vru_crossing_pedestrian:
+
+    on @phase_essence.start:
+        call logger.log_info("trigger_time:$(trigger_time)")
+
+    on @top.clk: 
+        #call logger.log_info("logging from vru_crossing_pedestrian scenario")
+        #call logger.log_info("trigger_time : $(trigger_time)")
+        #if up_coming_car.prev_state !=null: 
+        #    call logger.log_info("up_coming_car.prev_state.speed  : $(up_coming_car.prev_state.speed)")    
+        # call logger.log_info("up_coming_car.prev_state  : $(up_coming_car.prev_state)")
+        # call logger.log_info("up_coming_car.prev_state.speed  : $(up_coming_car.prev_state.speed)")
+        call logger.log_info("gen_pedestrian_crossing_time:$(gen_pedestrian_crossing_time)")
+        call logger.log_info("time_to_meet:$(time_to_meet)")
+
+    on @ego_stopped_event:
+        call logger.log_info("logging from ego_stopped_event")
+        call logger.log_info("ego_stopped_bool:$(ego_stopped_bool)")
+    
+    on @ego_standing_still:
+        call logger.log_info("logging from ego_standing_still")
+
+    on @move_trigger_event:
+        call logger.log_info("logging from move_trigger_event")
+
+
+    vru_start_pos: msp_position
+    vru_end_pos: msp_position
+    plain_object_group_position_along_ref_position(vru_group_start_position_params, pedestrian_group, vru_start_pos)
+    plain_object_group_position_along_ref_position(vru_group_end_position_params, pedestrian_group, vru_end_pos)
+    
+    # Calculate positions based on parameters
+    trigger_time: time
+    keep(default trigger_time in [2..5]second)
+
+    lon_offset: length with:
+        keep(default it in [0m..5m])
+        
+    # Distance between pedestrian initial placement and reference vehicle's trajectory.
+    distance_to_trajectory: length with:
+        keep(it == gen_pedestrian_lateral_distance)
+        
+    # Used for synchronizing when the pedestrian reaches
+    # the vehicle trajectory when it is planned to reach the person
+    keep(distance_to_trajectory / gen_pedestrian_speed 
+        in [trigger_time-0.5s..trigger_time+0.5s])
+
+    # If Ego is slower than standstill_threshold for longer than time_delay,
+    # The scenario will end.
+    time_delay: time with:
+        keep(default it == 0.1s)
+    
+    standstill_threshold: speed with:
+        keep(default it == 0.25mps)
+
+    # The Event checks the following:
+    # 1. Ego's speed is less than standstill_threshold
+    # 2. Ego's previous state was not null and also prev state speed 
+    # was greater than standstill_threshold to ensure that timer should reset if Ego 
+    # speed goes above standstill_threshold after slowing.
+    event ego_stopped_event is @top.clk if (up_coming_car.state.speed < standstill_threshold \
+        and up_coming_car.prev_state != null 
+        and up_coming_car.prev_state.speed > standstill_threshold)
+
+
+    var ego_stopped_time: time = sample(top.time, @ego_stopped_event)
+    var ego_stopped_bool: bool = sample(true, @ego_stopped_event)
+    set ego_stopped_bool = false
+
+    # Ego stopped event
+    # Checks if Ego is slower than standstill_threshold for a delay of 'time_delay'
+    event ego_standing_still is @top.clk if (ego_stopped_bool == true and top.time \
+        > (ego_stopped_time + time_delay))
+
+    # Event to reset the timer once Ego speeds up after slowing down
+    event ego_stops_and_moves is @top.clk if (up_coming_car.state.speed > standstill_threshold \
+        and up_coming_car.prev_state != null 
+        and up_coming_car.prev_state.speed < standstill_threshold)
+    
+    on @ego_stops_and_moves:
+        set ego_stopped_time = 0s
+        set ego_stopped_bool = false
+
+    var ego_nearest_vru_id: int = sample(get_nearest_vru_id(), @start)
+    # Function to determine the ID of nearest VRU to Ego
+    def get_nearest_vru_id()-> int is:
+        var temp_distance: length
+        var min_distance: length = 2147483647m 
+        var nearest_vru_id: int
+        for vru, vru_id in pedestrian_group.objects:
+            temp_distance= up_coming_car.road_distance(vru,closest_compound,closest_compound,lon, lane)
+            if (temp_distance < min_distance):
+                set min_distance = temp_distance
+                set nearest_vru_id = vru_id                
+        return nearest_vru_id
+
+    var time_to_meet: time = sample(sut.car.get_time_gap(pedestrian_group.objects[ego_nearest_vru_id]), @top.clk)
+    set time_to_meet = 10000s
+
+    # Sample longitudinal distance (in seconds) between SUT and pedestrian
+    # var time_to_meet: time = sample(
+    #     (up_coming_car.state == null or up_coming_car.state.speed == 0kph) ? 10000s :
+    #         (vru_longitudinal_distance / up_coming_car.state.speed),
+    #     @top.clk)
+    # set time_to_meet = 10000s
+    
+    event move_trigger_event is @top.clk if (time_to_meet < trigger_time or ego_standing_still.event_occurred() == true)
+    
+    # Position pedestrians based on parameters
+    # This would typically involve positioning logic based on the parameters
+    # For now, we'll define the basic structure
+    position_along_road(vru_start_pos, junction.internal_road, lon_offset: lon_offset, lat_offset: -4m)
+    position_along_road(vru_end_pos, junction.internal_road, lon_offset: lon_offset, lat_offset: 4m)
+
+    #first_object: person
+    #vru_test_pos: msp_position
+    #position_along_road(vru_test_pos, junction.internal_road, lon_offset: lon_offset, lat_offset: -10m)
+
+    do phase_essence: serial():
+        move_trigger: wait @move_trigger_event
+        # Pedestrian movement logic would go here
+        # For each pedestrian in the group:
+        #first_object.exists_at(vru_test_pos)
+
+        pedestrian_group_move_at_essence: pedestrian_group.group_move(vru_group_end_position_params, \
+            duration: gen_pedestrian_crossing_time, 
+            start_position_params: vru_group_start_position_params)             
+            

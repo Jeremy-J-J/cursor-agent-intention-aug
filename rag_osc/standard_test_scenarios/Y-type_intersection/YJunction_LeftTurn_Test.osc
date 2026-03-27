@@ -1,0 +1,55 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # Y型路口分叉场景定义
+    road_in: one_way_road
+    road_out_left: one_way_road
+    road_out_right: one_way_road
+    common_internal_road: internal_road
+
+    road_curvature_left: road_curvature with:
+        keep(road_curvature_left.direction == left_curve)
+
+    top.roads_exit_junction_relation(road_out_left, road_out_right, any_right)
+
+    conflicting_internal_road: internal_road_with_conflict
+    keep(conflicting_internal_road.internal_road_id == common_internal_road.id)
+    keep(common_internal_road.in_one_way_road_id == road_in.id)
+    keep(common_internal_road.out_one_way_road_id == road_out_left.id)
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("road_in.id: $(road_in.id)") 
+        call logger.log_info("road_out_left.id: $(road_out_left.id)") 
+        call logger.log_info("common_internal_road.id: $(common_internal_road.id)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：从入口道路进入，经过内部道路，左转分叉到出口道路
+            serial():
+                # 阶段1：从入口道路进入内部道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(road_in, at: start)
+                    along(common_internal_road, at: end)
+
+                # 阶段2：从内部道路左转分叉到左侧出口道路
+                sut_drive_leave: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(road_curvature_left)
+                    along(common_internal_road, at: start)
+                    along(road_out_left, at: end)
+
+

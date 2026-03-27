@@ -1,0 +1,86 @@
+# 场景: cmr_gvt_onside_test_run
+# 描述: 前方同车道有静止摩托车，左侧车道有静止汽车(并排)
+# 地图: M499_FTX_suburban.xodr (市郊)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.cmr_gvt_onside_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cmr_gvt_onside_test_run")
+    
+    my_road: one_way_road
+    
+    # 自车车道
+    ego_lane: int with:
+        keep(default it == 2)
+        keep(it >= 2)
+    
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 150m)
+    
+    # 自车初始速度
+    ego_speed: speed with:
+        keep(default it in [20kph, 30kph, 40kph, 50kph, 60kph])
+    
+    # 静止障碍物相对距离
+    obstacle_relative_distance: length with:
+        keep(default it == 20m)
+    
+    # 场景持续时间
+    duration_time: time with:
+        keep(it >= 10s)
+
+    on @set_up.start:
+        call logger.log_info("===== CMR-GVT-OnSide场景参数 =====")
+        call logger.log_info("自车初始速度:           $(ego_speed)")
+        call logger.log_info("障碍物距离:             $(obstacle_relative_distance)")
+        call logger.log_info("场景持续时间:           $(duration_time)")
+        call logger.log_info("自车车道:               $(ego_lane)")
+    
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == ego_lane)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.gen_ego_lane_at_end == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+            
+            # 同车道前方静止摩托车
+            npc_motorcycle_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == obstacle_relative_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_vehicle_type == motorcycle)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+            
+            # 左侧车道静止汽车(与摩托车并排)
+            npc_car_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == obstacle_relative_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane - 1)
+                keep(it.npc_target_lane == ego_lane - 1)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.cmr_gvt_onside_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cmr_gvt_onside_test_run"
+    set additional_parameters.test_index = "auto_20251121_000004"

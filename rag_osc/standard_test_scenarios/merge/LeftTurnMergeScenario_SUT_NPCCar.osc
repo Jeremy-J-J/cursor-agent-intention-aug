@@ -1,0 +1,72 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 左转路口合并场景定义（后车）
+    main_road: roads_follow_in_junction with:
+        keep(it.internal_road.direction == straight)
+        keep(it.out_road.min_lanes >= 2)
+    
+    road_in: one_way_road with:
+        keep(it.max_lanes == 1)
+    
+    road_curvature_right: internal_road with:
+        keep(it.direction == right)
+    
+    internal_road: internal_road_with_conflict
+    keep(internal_road.internal_road_id == main_road.internal_road.id)
+    keep(internal_road.conflicting_road.id == road_curvature_right.id)
+
+    # NPC车辆
+    npc_car_rear: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("internal_road.id: $(internal_road.id)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：从入口道路进入，经过冲突道路，汇入主路
+            serial():
+                # 阶段1：从入口道路进入冲突道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(road_in, at: start)
+                    along(internal_road.conflicting_road, at: end)
+
+                # 阶段2：从冲突道路汇入主路
+                sut_drive_leave: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(internal_road.conflicting_road, at: start)
+                    along(main_road.out_road, at: end)
+
+            # 后车：在主路上行驶
+            serial():
+                # 阶段1：在主路入口道路行驶，进入路口内部道路
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(main_road.in_road, at: start, end_offset: [20m..50m])
+                    along(main_road.internal_road, at: end)
+                    keep_lane()
+                    keep_speed()
+
+                # 阶段2：从路口内部道路驶出到主路出口道路
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(main_road.internal_road, at: start)
+                    along(main_road.out_road, at: end)
+                    keep_lane()
+                    keep_speed()
+
+

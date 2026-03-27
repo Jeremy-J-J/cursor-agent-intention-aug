@@ -1,0 +1,95 @@
+# 测试场景: 双重超车
+# 描述: 测试两侧车道都有车辆从后方超越时的感知和安全性
+# 场景: 三车道道路,自车在中间车道,左右两侧车道都有车辆从后方快速接近
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.dualpass_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "dualpass_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+    
+    # 自车车道 (至少2,确保有左右车道)
+    ego_lane: int with:
+        keep(it >= 2)
+
+    # NPC车道 (相邻车道)
+    npc_lane: int with:
+        keep(it >= 1)
+        keep(default it in [ego_lane - 1, ego_lane + 1])
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 40kph)
+
+    # NPC速度 (比自车快)
+    npc_speed: speed with:
+        keep(default it == 50kph)
+
+    # NPC相对距离 (负值表示在后方)
+    npc_relative_distance: length with:
+        keep(default it in [-20m..-10m])
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 200m)
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(it >= 15s)
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("Ego speed: $(ego_speed)")
+        call logger.log_info("NPC speed: $(npc_speed)")
+        call logger.log_info("Initial gap (NPC behind Ego): $(npc_relative_distance)")
+        call logger.log_info("Scenario duration: $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车在中间车道行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 3)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.gen_ego_lane_at_end == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # 左侧车道NPC车辆
+            npc_driving_left: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == npc_relative_distance)
+                keep(it.npc_initial_speed == npc_speed)
+                keep(it.npc_target_speed == npc_speed)
+                keep(it.npc_initial_lane == ego_lane - 1)
+                keep(it.npc_target_lane == ego_lane - 1)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+            # 右侧车道NPC车辆
+            npc_driving_right: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == npc_relative_distance)
+                keep(it.npc_initial_speed == npc_speed)
+                keep(it.npc_target_speed == npc_speed)
+                keep(it.npc_initial_lane == ego_lane + 1)
+                keep(it.npc_target_lane == ego_lane + 1)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.dualpass_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "dualpass_test_run"
+    set additional_parameters.test_index = "auto_20251121_000001"

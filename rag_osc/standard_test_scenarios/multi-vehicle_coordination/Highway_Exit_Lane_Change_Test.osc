@@ -1,0 +1,73 @@
+# 场景: RRMExit_test_run
+# 描述: 高速公路出口场景，自车向右变道出口，同车道前方有NPC，右侧车道侧方有NPC
+# 地图: M56_FTX_highway_prague.xodr (高速公路)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_highway_exit_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.RRMExit_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "RRMExit_test_run")
+    
+    my_road: highway_exit
+    
+    # 起始车道
+    lane_start: int with:
+        keep(it in [1..2])
+    
+    # 场景持续时间
+    driving_duration: time with:
+        keep(it in [1s..15s])
+    
+    # NPC车道(右侧车道)
+    npc_lane: int with:
+        keep(it == lane_start + 1)
+    
+    # 自车速度
+    ego_speed: speed with:
+        keep(it in [80kph..120kph])
+    
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+    
+    do serial():
+        set_up: parallel():
+            # 自车向右变道出口
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_highway_exit() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_ego_lane_at_start == lane_start)
+                keep(it.gen_ego_lane_at_end == lane_start + 1)
+                keep(it.ego_driving_duration == driving_duration)
+            
+            # 同车道前方NPC
+            npc_driving_front: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [0m..60m])
+                keep(it.npc_initial_speed == ego_speed)
+                keep(it.npc_target_speed == ego_speed)
+                keep(it.npc_initial_lane == lane_start)
+                keep(it.npc_target_lane == lane_start)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+            
+            # 右侧车道侧方NPC
+            npc_driving_side: sut.npc_free_driving() with:
+                keep(it.npc_relative_position in [-50m..0m])
+                keep(it.npc_initial_speed == ego_speed)
+                keep(it.npc_target_speed == ego_speed)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.RRMExit_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "RRMExit_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

@@ -1,0 +1,87 @@
+# 测试场景: 右转弯盲区行人和自行车
+# 描述: 测试自车在右转弯道路上遇到盲区内行人和自行车的避障行为
+# 场景: 自车在右弯道行驶,前方50米处有行人,60米处有自行车
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.blind_right_ped_bike_test_run:
+    # 道路弯曲参数
+    max_radius: length with:
+        keep(soft it <= 150m)
+
+    min_radius: length with:
+        keep(soft it == 5m)
+
+    curve_direction: curve_direction with:
+        keep(soft it == right_curve)
+
+    min_road_length: length with:
+        keep(soft it >= 120m)
+
+
+    start_offset: length with:
+        keep(soft it in [10m..20m])
+    
+    # 定义弯道
+    curved_road: road_curvature with:
+        keep(it.max_radius == self.max_radius)
+        keep(it.min_radius == self.min_radius)
+        keep(it.direction == self.curve_direction)
+        keep(it.length > self.min_road_length)
+
+    lon_offset_person : length with:
+        keep(soft it in [10m..50m])
+
+    lon_offset_cyclist : length with:
+        keep(soft it in [lon_offset_person-5m .. lon_offset_person+5m])
+
+    lat_offset : length with:
+        keep(soft it == [-3m..0m])
+
+    # 脆弱道路使用者: 行人
+    vru_person: person
+    vru_person_position: msp_position
+    position_along_drive(
+        vru_person_position, 
+        sut_drive, 
+        path_fraction: 0, 
+        lon_offset: lon_offset_person, 
+        lat_offset: lat_offset
+    )
+    
+    # 脆弱道路使用者: 自行车
+    vru_cyclist: cyclist
+    vru_cyclist_position: msp_position
+    position_along_drive(
+        vru_cyclist_position, 
+        sut_drive, 
+        path_fraction: 0, 
+        lon_offset: lon_offset_cyclist, 
+        lat_offset: lat_offset
+    )
+
+    duration_time: time  with:
+        keep(default it in [5s..10s])
+    
+    do parallel():
+        # 自车沿弯道行驶
+        sut_drive: sut.car.drive() with:
+            along(curved_road, start_offset: start_offset, at: start)
+            duration(duration_time, run_mode: best_effort)
+        
+        # 行人和自行车出现在指定位置
+        vru_person.exists_at(vru_person_position)
+        vru_cyclist.exists_at(vru_cyclist_position)
+
+extend top.main:
+    do sut.blind_right_ped_bike_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "blind_right_ped_bike_test_run"
+    set additional_parameters.test_index = "auto_20251121_000008"

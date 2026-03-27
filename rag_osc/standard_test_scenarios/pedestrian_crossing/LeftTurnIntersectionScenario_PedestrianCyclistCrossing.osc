@@ -1,0 +1,99 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 左转路口场景定义（带VRU横穿）
+    ego_one_way_road: one_way_road
+
+    # 路口路径定义
+    left_turn: roads_follow_in_junction_with_tl 
+    right_turn: roads_follow_in_junction_with_tl
+    straight_line: roads_follow_in_junction_with_tl
+
+    keep(straight_line.in_road.min_lanes >= 2)
+    keep(left_turn.internal_road.traffic_light_id == right_turn.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.traffic_light_id == straight_line.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.direction == left)
+    keep(right_turn.internal_road.direction == right)
+    keep(straight_line.internal_road.direction == straight)
+    keep(straight_line.in_road.id == ego_one_way_road.id)
+
+    # 人行横道道路定义
+    # road_on_crosswalk - 离开路口时到达的与人行横道一致的道路路线
+    road_on_crosswalk: road_on_crosswalk with:
+        keep(it.kind == junction_exit)
+
+    # road_to_crosswalk - 到达 'road_on_crosswalk' 的道路路线
+    road_to_crosswalk: road_to_crosswalk with:
+        keep(it.road_on_crosswalk == self.road_on_crosswalk)
+
+    # VRU定义
+    p: person 
+    b: cyclist 
+    b_1: cyclist 
+
+    # VRU位置参数
+    start_pos: msp_position
+    end_pos: msp_position
+
+    get_roadside_position_by_crosswalk(start_pos, road_on_crosswalk, left, lon_offset: 1m, lat_offset: 1m)
+    get_roadside_position_by_crosswalk(end_pos, road_on_crosswalk, right, lon_offset: 2m, lat_offset: -1m)
+
+    travel_distance: length = math.abs(map.distance_between_global_positions(start_pos.global_position, end_pos.global_position))
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    lane_ego: int
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("min_lanes: $(straight_line.in_road.min_lanes)") 
+        call logger.log_info("road_on_crosswalk.length: $(road_on_crosswalk.length)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：左转通过路口，经过人行横道
+            serial():
+                # 阶段1：从入口道路进入路口内部道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    lane(lane_ego, at: start)
+                    along(ego_one_way_road, at: start)
+                    along(left_turn.internal_road, at: end)
+
+                # 阶段2：从路口内部道路经过人行横道
+                sut_drive_crosswalk: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(left_turn.internal_road, at: start)
+                    along(road_to_crosswalk, at: start)
+                    along(road_on_crosswalk, at: end)
+
+                # 阶段3：从人行横道驶出到出口道路
+                sut_drive_out: sut.car.drive() with:
+                    along(left_turn.out_road, at: end)
+
+            # VRU：行人及自行车横穿人行横道
+            serial():
+                # 行人横穿
+                call p.appear(start_pos)
+                p.move(end_pos) with:
+                    duration(travel_distance / (5kph), run_mode: best_effort)
+                p.disappear()
+
+                # 自行车1横穿
+                call b.appear(start_pos)
+                b.move(end_pos) with:
+                    duration(travel_distance / (6.5kph), run_mode: best_effort)
+                b.disappear()
+
+                # 自行车2横穿
+                call b_1.appear(start_pos)
+                b_1.move(end_pos) with:
+                    duration(travel_distance / (6.5kph), run_mode: best_effort)
+                b_1.disappear()
+

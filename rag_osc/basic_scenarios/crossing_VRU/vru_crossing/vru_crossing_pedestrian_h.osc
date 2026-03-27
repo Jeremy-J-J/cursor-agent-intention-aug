@@ -1,0 +1,53 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Instance scenario for pedestrian crossing based on vru_crossing_base
+# This scenario focuses on pedestrian crossing with configurable parameters
+
+scenario sut.vru_crossing_pedestrian inherits vru_crossing_base:
+    keep(default scenario_str == "vru_crossing_pedestrian")
+    
+    up_coming_car: vehicle
+    # Override to have only pedestrians in this instance
+    keep(gen_number_of_pedestrians in [1..5])
+    # keep(gen_number_of_cyclists == 1)
+    
+    # Specific parameters for pedestrian crossing
+    gen_pedestrian_crossing_direction: angle
+    keep(gen_pedestrian_crossing_direction in [70..110]degree or 
+        gen_pedestrian_crossing_direction in [250..290]degree)
+         
+    # Position relative to ego vehicle
+    gen_pedestrian_lateral_distance: length
+    keep(default gen_pedestrian_lateral_distance in [5..20]m)
+    
+    gen_pedestrian_longitudinal_distance: length
+    keep(default gen_pedestrian_longitudinal_distance in [10..50]m)
+    
+    # Timing of crossing
+    gen_pedestrian_crossing_time: time
+    keep(default gen_pedestrian_crossing_time in [2..8]s)
+
+    junction: roads_follow_in_junction
+
+# Main scenario for pedestrian crossing
+scenario sut.vru_crossing_pedestrian_main inherits vru_crossing_base_main:
+    keep(default scenario_str == "vru_crossing_pedestrian_main")
+
+# # Ego warm-up scenario for pedestrian crossing
+# scenario sut.vru_crossing_pedestrian_ego_warm_up inherits vru_crossing_base_ego_warm_up:
+#     keep(default scenario_str == "vru_crossing_pedestrian_ego_warm_up")
+#     keep(gen_number_of_cyclists == 0)
+
+# # Post scenario for pedestrian crossing
+# scenario sut.vru_crossing_pedestrian_post inherits vru_crossing_base_post:
+#     keep(default scenario_str == "vru_crossing_pedestrian_post")
+#     keep(gen_number_of_cyclists == 0)

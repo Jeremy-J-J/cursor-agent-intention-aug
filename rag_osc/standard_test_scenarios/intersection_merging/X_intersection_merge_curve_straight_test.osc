@@ -1,0 +1,104 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # X型交叉路口合并场景定义
+    curvature: road_curvature with:
+        keep(curvature.direction == right_curve)
+
+    road_straight: roads_follow_in_junction with:
+        keep(it.internal_road.junction_category == merge)
+
+    road_curvature: roads_follow_in_junction with:
+        keep(it.internal_road.junction_category == merge)
+
+    keep(road_curvature.in_road.id != road_straight.in_road.id)
+    keep(road_straight.internal_road.junction_id == road_curvature.internal_road.junction_id)
+    keep(road_straight.out_road.id == road_straight.out_road.id)
+
+    roads_enter_junction_relation(road_curvature.in_road, 
+                                  road_straight.in_road,
+                                  relative_direction: any_left)
+
+    conflicting_internal_road: internal_road_with_conflict
+    keep(conflicting_internal_road.internal_road_id == road_curvature.internal_road.id)
+
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_rear: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    lane_ego: int with:
+        keep(lane_ego > 1)
+
+    end_offset: length with:
+        keep(end_offset in [1m..20m])
+
+    # 日志输出
+    on @sut_drive.start:
+        call logger.log_info("min_lanes: $(road_straight.in_road.min_lanes)") 
+        call logger.log_info("road_curvature.internal_road.length: $(road_curvature.internal_road.length)")
+        call logger.log_info("road_curvature.internal_road.in_one_way_road_id: $(road_curvature.internal_road.in_one_way_road_id)")
+        call logger.log_info("road_curvature.internal_road.out_one_way_road_id: $(road_curvature.internal_road.out_one_way_road_id)")
+        call logger.log_info("road_curvature.internal_road.junction_id: $(road_curvature.internal_road.junction_id)")
+        call logger.log_info("road_straight.internal_road.junction_id: $(road_straight.internal_road.junction_id)")
+        call logger.log_info("road_straight.internal_road.in_one_way_road_id: $(road_straight.internal_road.in_one_way_road_id)")
+        call logger.log_info("road_straight.internal_road.out_one_way_road_id: $(road_straight.internal_road.out_one_way_road_id)")
+
+    do serial():
+        # 阶段1：接近路口
+        sut_approach: parallel():
+            # 自车：沿弯道行驶，进入路口内部道路
+            serial():
+                sut_drive_pre: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(curvature)
+
+                sut_drive: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(road_curvature.in_road, at: start)
+                    along(road_curvature.internal_road, at: end)
+
+            # 后车：在直行道路上行驶
+            npc_car_rear.drive() with:
+                along(road_straight.in_road, at: start, end_offset: [0m..20m])
+                keep_lane()
+                keep_speed(run_mode: best_effort)
+
+            # 前车：跟随自车
+            npc_car_front.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(same_as: sut.car)
+
+        # 阶段2：合并到出口道路
+        sut_approach_merge: parallel():
+            # 自车：从冲突道路合并到出口道路，并变道
+            sut_drive_merge: sut.car.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_ego, at: start)
+                lane(lane_ego - 1, at: end)
+                along(conflicting_internal_road, at: start)
+                along(road_curvature.out_road, at: end)
+
+            # 后车：从冲突道路的冲突道路合并到直行出口道路
+            npc_car_rear.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_ego)
+                along(conflicting_internal_road.conflicting_road, at: start)
+                along(road_straight.out_road, at: end)
+                keep_speed(run_mode: best_effort)
+
+            # 前车：在出口道路上行驶，位于自车前方，并变道
+            npc_car_front.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                position([1m..10m], ahead_of: sut.car, at: start)
+                lane(lane_ego, at: start)
+                lane(lane_ego - 1, at: end)
+                along(road_straight.out_road, at: end)
+                keep_speed(run_mode: best_effort)
+

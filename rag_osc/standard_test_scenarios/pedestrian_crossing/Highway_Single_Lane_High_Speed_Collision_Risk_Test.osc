@@ -1,0 +1,111 @@
+# 测试场景: 行人碰撞风险
+# 描述: 测试高速行驶时前方有停车且行人横穿的高风险场景
+# 场景: 自车以80kph行驶,前方200米和210米处各有一辆停车,行人从右侧5kph横穿
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/crossing_VRU/vru_crossing/vru_crossing_pedestrian_no_wait_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.crash_ped_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "crash_ped_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+    
+    # 自车车道
+    ego_lane: int with:
+        keep(it >= 1)
+    
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 300m)
+    
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 80kph)
+    
+    # 后方停车距离
+    rear_crash_car_distance: length with:
+        keep(default it == 200m)
+    
+    # 前方停车距离
+    front_crash_car_distance: length with:
+        keep(it == rear_crash_car_distance + 10m)
+    
+    # 行人距离
+    pedestrian_distance: length with:
+        keep(it == rear_crash_car_distance - 10m)
+    
+    # 行人横穿方向
+    ped_direction: av_side with:
+        keep(default it == right)
+    
+    # 测试持续时间
+    duration_time: time with:
+        keep(default it == 12s)
+    
+    on @set_up.start:
+        call logger.log_info("===== CrashPed场景参数 =====")
+        call logger.log_info("主车速度:               $(ego_speed)")
+        call logger.log_info("后方追尾车距离:         $(rear_crash_car_distance)")
+        call logger.log_info("前方追尾车距离:         $(front_crash_car_distance)")
+        call logger.log_info("行人距离:               $(pedestrian_distance)")
+        call logger.log_info("行人横穿方向:           $(ped_direction)")
+        call logger.log_info("场景持续时间:           $(duration_time)")
+    
+    do serial():
+        set_up: parallel():
+            # 自车高速行驶
+            ego_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+            
+            # 后方停止车辆
+            rear_crash_car: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == rear_crash_car_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_vehicle_type == sedan)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+            
+            # 前方停止车辆
+            front_crash_car: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == front_crash_car_distance)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_vehicle_type == sedan)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+            
+            # 行人横穿
+            pedestrian_crossing: sut.vru_crossing_pedestrian_no_wait() with:
+                keep(it.gen_pedestrian_longitudinal_distance == start_offset + pedestrian_distance)
+                keep(it.gen_pedestrian_lateral_distance == 3m)
+                keep(it.gen_pedestrian_speed == 5kph)
+                keep(it.gen_number_of_pedestrians == 1)
+                keep(it.up_coming_car == sut.car)
+                keep(it.move_from == ped_direction)
+                keep(it.my_road == self.my_road)
+
+extend top.main:
+    do sut.crash_ped_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "crash_ped_test_run"
+    set additional_parameters.test_index = "auto_20251130_000001"

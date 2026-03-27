@@ -1,0 +1,108 @@
+# 场景: cut_out_test_run
+# 描述: 自车与NPC同速行驶,前方有障碍物,NPC车辆切出到相邻车道
+# 地图: M499_FTX_suburban.xodr (市郊)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_cut_out_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.cut_out_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cut_out_test_run")
+    
+    # 测试道路
+    my_road: one_way_road
+    
+    # 自车车道
+    ego_lane: int with:
+        keep(it >= 1)
+    
+    # NPC目标车道 (相邻车道)
+    npc_target_lane: int with:
+        keep(it >= 1)
+        keep(default it in [ego_lane - 1, ego_lane + 1])
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= my_road.length - 200m)
+
+    # 行驶速度 (自车和NPC相同)
+    drive_speed: speed with:
+        keep(default it == 50kph)
+
+    # NPC相对自车位置
+    npc_relative_position: length with:
+        keep(default it == 10m)
+
+    # 变道开始时间
+    lane_change_start_time: time with:
+        keep(default it in [0s..1s])
+
+    # 变道持续时间
+    lane_change_duration: time with:
+        keep(default it in [3s..4s])
+
+    # 障碍物相对自车位置
+    obstacle_relative_position: length with:
+        keep(default it == 44m)
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(default it == 6s)
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("Ego / NPC speed:         $(drive_speed)")
+        call logger.log_info("NPC rel pos:             $(npc_relative_position)")
+        call logger.log_info("NPC lane change: start   $(lane_change_start_time)  dur $(lane_change_duration)")
+        call logger.log_info("Obstacle rel pos:        $(obstacle_relative_position)")
+        call logger.log_info("Scenario duration:       $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶阶段
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == drive_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_ego_lane_at_start == ego_lane)
+                keep(it.gen_ego_lane_at_end == ego_lane)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # NPC切出阶段
+            npc_cut_out_phase: sut.npc_cut_out() with:
+                keep(it.npc_relative_position == self.npc_relative_position)
+                keep(it.npc_initial_speed == drive_speed)
+                keep(it.npc_target_speed == drive_speed)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == self.npc_target_lane)
+                keep(it.npc_cut_out_start_time == lane_change_start_time)
+                keep(it.npc_cut_out_duration == lane_change_duration)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+            # 障碍物阶段 (静止的公交车)
+            obstacle_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == obstacle_relative_position)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_initial_lane == ego_lane)
+                keep(it.npc_target_lane == ego_lane)
+                keep(it.npc_vehicle_type == bus)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.cut_out_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cut_out_test_run"
+    set additional_parameters.test_index = "auto_20251121_000003"

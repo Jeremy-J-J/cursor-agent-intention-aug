@@ -1,0 +1,141 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import "$FTX_PACKAGES/common/scenarios/generic_base_scenario/generic_base_scenario_top.osc"
+
+# Base scenario for VRU (Vulnerable Road Users) crossing scenarios
+# This base scenario includes pedestrians and cyclists crossing relative to a target vehicle
+scenario sut.vru_crossing_base inherits generic_base_scenario:
+
+    # Scenario string name
+    keep(scenario_str == "vru_crossing_base")
+
+    # Number of pedestrians and cyclists
+    gen_number_of_pedestrians: int
+    keep(default gen_number_of_pedestrians in [1..5])
+
+    gen_number_of_cyclists: int
+    keep(default gen_number_of_cyclists in [1..3])
+
+    # Plain object group definitions
+    pedestrian_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == person)
+        keep(it.objects.size() == gen_number_of_pedestrians)
+
+    cyclist_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == cyclist)
+        keep(it.objects.size() == gen_number_of_cyclists)
+
+    # Control parameter for whether crossing occurs on sidewalk
+    gen_crossing_on_sidewalk: bool
+    keep(default gen_crossing_on_sidewalk in [true, false])
+
+    # VRU speed parameters
+
+    gen_pedestrian_speed: speed
+
+    # gen_pedestrian_speed: speed with:
+    #     keep(default it in [1..10]kph)
+
+    gen_cyclist_speed: speed
+
+    # gen_cyclist_speed: speed with:
+    #     keep(default it in [5..20]kph)
+
+    # Positioning parameters relative to target vehicle
+    # Lateral offset from ego vehicle path
+    gen_vru_lateral_offset_min: length
+    gen_vru_lateral_offset_max: length
+    keep(gen_vru_lateral_offset_min <= gen_vru_lateral_offset_max)
+    
+    # Longitudinal positioning relative to ego
+    gen_vru_longitudinal_distance_min: length
+    gen_vru_longitudinal_distance_max: length
+    keep(gen_vru_longitudinal_distance_min <= gen_vru_longitudinal_distance_max)
+
+    vru_longitudinal_distance: length
+    keep(vru_longitudinal_distance in [gen_vru_longitudinal_distance_min, gen_vru_longitudinal_distance_max])
+
+    # Crossing direction parameters
+    gen_crossing_direction: angle
+    keep(default gen_crossing_direction in [0..360]degree)
+
+    # Timing parameters
+    gen_crossing_start_time: time
+    keep(default gen_crossing_start_time in [1..10]s)
+    
+    gen_crossing_duration: time
+    keep(default gen_crossing_duration in [2..15]s)
+
+    vru_group_start_position_params: plain_object_group_position_params with:
+        keep(default it.max_distance_between_objects == 1.5m)
+        keep(default it.max_lat_offset == 1.5m)
+        keep(default it.min_lat_offset == -1.5m)
+
+    vru_group_end_position_params: plain_object_group_position_params with:
+        keep(default it.max_distance_between_objects == 1.5m)
+        keep(default it.max_lat_offset == 1.5m)
+        keep(default it.min_lat_offset == -1.5m)
+    
+
+    move_from: av_side  
+
+    #vru_start_position: msp_position
+    #vru_end_positon: msp_position
+    
+
+
+
+# Main scenario for VRU crossing
+scenario sut.vru_crossing_base_main inherits generic_base_scenario:
+    # Scenario string name
+    keep(scenario_str == "vru_crossing_base_main")
+
+    # Plain object group definitions
+    pedestrian_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == person)
+
+    cyclist_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == cyclist)
+
+# Ego warm-up scenario
+scenario sut.vru_crossing_base_ego_warm_up inherits generic_base_ego_warm_up:
+    # Scenario string name
+    keep(scenario_str == "vru_crossing_base_ego_warm_up")
+
+    # Plain object group definitions
+    pedestrian_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == person)
+
+    cyclist_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == cyclist)
+
+    initial_road: one_way_road
+
+# Post scenario
+scenario sut.vru_crossing_base_post inherits generic_base_post:
+    # Scenario string name
+    keep(scenario_str == "vru_crossing_base_post")
+
+    # Plain object group definitions
+    pedestrian_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == person)
+
+    cyclist_group: common_plain_object_group with:
+        for obj in it.objects:
+            keep(obj.kind == cyclist)

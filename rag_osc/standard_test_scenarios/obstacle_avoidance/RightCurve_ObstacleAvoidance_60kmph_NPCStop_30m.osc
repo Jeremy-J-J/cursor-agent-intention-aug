@@ -1,0 +1,63 @@
+# 测试场景: 弯道车辆
+# 描述: 测试在右弯道上遇到停止车辆的避障能力
+# 场景: 自车以60kph在右弯道行驶,前方30米处有停止车辆
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/curved_road/ego_free_drive_on_curved_road.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.bend_car_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "bend_car_test_run")
+    
+    in_road: one_way_road
+
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 60kph)
+    
+    # NPC在弯道中的距离
+    npc_distance_in_curve: length with:
+        keep(default it == 30m)
+        
+    # 测试持续时间
+    duration_time: time with:
+        keep(default it == 15s)
+        
+    # NPC车辆类型
+    npc_vehicle_type: vehicle_category with:
+        keep(default it == sedan)
+    
+    do parallel():
+        set_up: serial():
+            sut.car.drive() with:
+                along(in_road)
+                
+        parallel():
+            # 自车在弯道上行驶
+            ego_phase: sut.ego_free_drive_on_curved_road() with:
+                keep(it.gen_curve_direction == right_curve)
+                keep(it.gen_max_radius <= 150m)
+                keep(it.gen_min_length >= 120m)
+                keep(it.gen_start_offset == 0m)
+                
+            # 弯道中的停止车辆
+            npc_phase: sut.npc_free_driving() with:
+                keep(it.npc_vehicle_type == self.npc_vehicle_type)
+                keep(it.npc_relative_position == npc_distance_in_curve)
+                keep(it.npc_initial_speed == 0kph)
+                keep(it.npc_target_speed == 0kph)
+                keep(it.npc_duration == duration_time)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.bend_car_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "bend_car_test_run"
+    set additional_parameters.test_index = "auto_20251126_000000"

@@ -1,0 +1,49 @@
+# Copyright (C) 2025 Foretellix Ltd ("Foretellix")
+# This source code file is licensed to you under Foretellix' End User License
+# Agreement, you may not use this file except in compliance with the License.
+# You are not allowed to distribute it to any third party without Foretellix'
+# written approval.
+# If you choose to modify this code (in compliance with the license terms),
+# you do it at your own risk, and Foretellix will no longer supply any
+# support or maintenance services for this source code.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+extend sut.npc_acc_dec:
+
+    on @phase_essence.start: 
+        call logger.log_info("Starting NPC acceleration/deceleration scenario")
+        call logger.log_info("NPC will accelerate/decelerate from $(npc_initial_speed) to $(npc_stop_target_speed)")
+
+    do phase_essence: serial():
+        # Create NPC vehicle for acceleration/deceleration behavior
+        npc_vehicle: npc_car.drive() with:
+            # Position relative to ego
+            position(npc_relative_position_x, ahead_of: ref_car, at: start)
+            
+            # Initial speed
+            speed(npc_initial_speed)
+            
+            # Lane position
+            lane(0, same_as: ref_car, at:start)
+
+            duration(npc_stop_start_time)
+
+        
+        # Accelerate or decelerate the NPC vehicle
+        npc_acc_dec_action: npc_car.drive() with:
+            speed(npc_stop_target_speed, at: end)
+            duration(npc_stop_duration)
+
+extend sut.npc_acc_dec_test:
+
+    do phase_acc_dec_test: serial():
+
+        # Invoke the default base ego warm up scenario for the free_drive family
+        phase_acc_dec_ego_warm_up: free_drive_family_base_ego_warm_up()
+
+        # Invoke npc_acc_dec scenario
+        phase_acc_dec_scenario: npc_acc_dec()
+
+        # Invoke the default base post scenario for the free_drive family
+        phase_acc_dec_post: free_drive_family_base_post()
