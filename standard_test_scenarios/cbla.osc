@@ -1,0 +1,98 @@
+# 测试场景: 自行车左侧避让 (CBLA - Crossing Bicycle Left Avoidance)
+# 描述: 测试自行车沿道路行驶时的避让行为
+# 场景: 自车行驶中,行人以15kph沿道路最右侧车道移动
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend vru_driver:
+    keep(default vru_behavior.enable == false)
+
+scenario sut.cbla_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cbla_test_run")
+
+    # 测试道路
+    road: one_way_road
+    
+    # VRU行人
+    vru: cyclist
+    
+    # 起始和结束位置
+    start_position: msp_position
+    end_position: msp_position
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= road.length - 100m)
+
+    # 自车起始速度
+    start_speed: speed with:
+        keep(default it in [20kph, 30kph, 40kph, 50kph, 60kph])
+
+    # VRU速度
+    vru_speed: speed with:
+        keep(default it == 15kph)
+
+
+    # VRU起始偏移
+    vru_start_offset: length with:
+        keep(default it == 6m)
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(it >= vru_start_offset / vru_speed + 2s)
+        keep(it <= 3 * vru_start_offset / vru_speed + 2s)
+
+    # VRU起始位置 (最右侧车道)
+    position_along_road(
+        start_position, 
+        road,
+        lon_offset: start_offset + vru_start_offset,
+        lat_offset: 0m, 
+        rightmost_lane: true
+    )
+
+    # VRU结束位置
+    position_along_road(
+        end_position, 
+        road,
+        lon_offset: start_offset + vru_start_offset + duration_time * vru_speed,
+        lat_offset: 0m, 
+        rightmost_lane: true
+    )
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("start_speed       : $(start_speed)")
+        call logger.log_info("vru_speed         : $(vru_speed)")
+        call logger.log_info("vru_start_offset  : $(vru_start_offset)")
+        call logger.log_info("duration_time     : $(duration_time)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == start_speed)
+                keep(it.ego_road_element == road)
+                keep(it.gen_min_lanes == 2)
+                keep(it.gen_max_lanes == 2)
+                keep(it.gen_ego_lane_at_start == 2)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # VRU沿道路移动
+            vru.move(end_position, start_position, duration: duration_time)
+
+extend top.main:
+    do sut.cbla_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cbla_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

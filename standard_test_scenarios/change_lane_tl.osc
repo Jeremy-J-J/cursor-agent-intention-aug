@@ -1,0 +1,68 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_rear: vehicle
+
+    # 路口路径定义
+    left_turn: roads_follow_in_junction_with_tl
+    right_turn: roads_follow_in_junction_with_tl
+    straight_line: roads_follow_in_junction_with_tl
+
+    # 路径约束
+    keep(straight_line.in_road.min_lanes >= 2)
+    keep(left_turn.internal_road.traffic_light_id == right_turn.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.traffic_light_id == straight_line.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.direction == left)
+    keep(right_turn.internal_road.direction == right)
+    keep(straight_line.internal_road.direction == straight)
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    end_offset: length with:
+        keep(end_offset in [10m..20m])
+    
+    ego_offset: length with:
+        keep(ego_offset in [end_offset+1m..end_offset+60m])
+    
+    lane_ego: int
+    lane_target: int with:
+        keep(lane_target == lane_ego - 1)
+
+    npc_rear_offset_range: length with:
+        keep(npc_rear_offset_range in [1m+ego_offset..50m+ego_offset])
+
+    on @sut_drive.start:
+        call logger.log_info("min_lanes: $(straight_line.in_road.min_lanes)")
+
+    do serial():
+        parallel():
+            # 自车：从右转道路变道到左转道路
+            sut_drive: sut.car.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_ego, at: start)
+                lane(lane_target, at: end)
+                along(right_turn.in_road, at: start, end_offset: ego_offset)
+                along(left_turn.in_road, at: end)
+
+            # 前车：在右转道路上，与自车同车道
+            npc_car_front.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_ego, at: start)
+                along(right_turn.in_road, end_offset: end_offset)
+                keep_lane()
+                keep_speed()
+
+            # 后车：在左转道路上，位于目标车道
+            npc_car_rear.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_target, at: start)
+                along(left_turn.in_road, end_offset: npc_rear_offset_range)
+                keep_lane()
+                keep_speed()

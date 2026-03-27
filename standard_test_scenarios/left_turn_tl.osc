@@ -1,0 +1,102 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 左转路口场景定义（带交通灯）
+    ego_one_way_road: one_way_road
+    oncoming_one_way_road: one_way_road
+
+    top.roads_enter_junction_relation(ego_one_way_road, oncoming_one_way_road, 
+        relative_direction: opposite)
+    
+    # 对向直行道路定义
+    opposite_straight: roads_follow_in_junction_with_tl
+    keep(opposite_straight.in_road.id == oncoming_one_way_road.id)
+    keep(opposite_straight.internal_road.direction == straight)
+    keep(opposite_straight.internal_road.junction_id == left_turn.internal_road.junction_id)
+
+    # 路口路径定义
+    left_turn: roads_follow_in_junction_with_tl 
+    right_turn: roads_follow_in_junction_with_tl
+    straight_line: roads_follow_in_junction_with_tl
+
+    keep(straight_line.in_road.min_lanes >= 2)
+    keep(left_turn.internal_road.traffic_light_id == right_turn.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.traffic_light_id == straight_line.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.direction == left)
+    keep(right_turn.internal_road.direction == right)
+    keep(straight_line.internal_road.direction == straight)
+    keep(straight_line.in_road.id == ego_one_way_road.id)
+
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_rear: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    lane_ego: int
+    
+    # 偏移参数
+    ego_stop_offset: length with:
+        keep(it in [1m..20m])
+
+    npc_stop_offset: length with:
+        keep(npc_stop_offset in [ego_stop_offset+1m..ego_stop_offset+20m])
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("min_lanes: $(straight_line.in_road.min_lanes)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：左转通过路口
+            serial():
+                # 阶段1：从入口道路进入路口内部道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    lane(lane_ego, at: start)
+                    along(left_turn.in_road, at: start, end_offset: ego_stop_offset)
+                    along(left_turn.internal_road, at: end)
+
+                # 阶段2：从路口内部道路驶出到出口道路
+                sut_drive_out: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(left_turn.internal_road, at: start)
+                    along(left_turn.out_road, at: end)
+
+            # 前车：对向直行通过路口
+            serial():
+                # 阶段1：从对向入口道路进入路口内部道路
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(opposite_straight.in_road, at: start, 
+                        end_offset: 50m-opposite_straight.internal_road.length-ego_stop_offset)
+                    along(opposite_straight.internal_road, at: end)
+
+                # 阶段2：从路口内部道路驶出到对向出口道路
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(opposite_straight.internal_road, at: start)
+                    along(opposite_straight.out_road, at: end)
+
+            # 后车：跟随自车左转通过路口
+            serial():
+                # 阶段1：从入口道路进入路口内部道路
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(same_as: sut.car)
+                    along(left_turn.in_road, at: start, end_offset: npc_stop_offset)
+                    along(left_turn.internal_road, at: end)
+
+                # 阶段2：从路口内部道路驶出到出口道路
+                npc_car_rear.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(left_turn.internal_road, at: start)
+                    along(left_turn.out_road, at: end)
+

@@ -1,0 +1,74 @@
+# 测试场景: 车组分流
+# 描述: 测试自车在前方低速车流和后方高速车流的夹击中行驶
+# 场景: 多车道,前方有低速密集车流,后方有高速车流接近,测试自车的决策能力
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$FTX/env/basic/behavioral_models/ftx/ftx_group_driver_model.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    do sut.drive_with_split_flow()
+
+scenario sut.drive_with_split_flow:
+    # 低速驾驶员模型 (40kph)
+    slow_driver: ftx_group_driver_model with:
+        keep(it.use_target_speed == true)
+        keep(it.target_speed == 40kph)
+    
+    # 高速驾驶员模型 (80kph)
+    fast_driver: ftx_group_driver_model with:
+        keep(it.use_target_speed == true)
+        keep(it.target_speed == 80kph)
+    
+    # 左侧车道前方车组 (低速,小间距3m)
+    left_front_group: all_lanes_car_group with:
+        keep(it.reference_car == sut.car)
+        keep(it.cars.size() == 4)
+        keep(it.reference_car_index == 1)
+    
+    for car in left_front_group.cars:
+        keep(car.initial_bm == slow_driver)
+        keep(car.color == blue)
+        keep(car.ftx_driver.collision_avoidance_behavior.safety_distance_lon == 3m)
+    
+    for params in left_front_group.members_params:
+        keep(params.min_initial_ttc in [0.5s..1s])
+        keep(params.initial_speed_percentage == 100)
+    
+    # 右侧车道前方车组 (低速,小间距3m)
+    right_front_group: all_lanes_car_group with:
+        keep(it.reference_car == sut.car)
+        keep(it.cars.size() == 3)
+        keep(it.reference_car_index == 1)
+    
+    for car in right_front_group.cars:
+        keep(car.initial_bm == slow_driver)
+        keep(car.color == red)
+        keep(car.ftx_driver.collision_avoidance_behavior.safety_distance_lon == 3m)
+    
+    for params in right_front_group.members_params:
+        keep(params.min_initial_ttc in [0.5s..1s])
+        keep(params.initial_speed_percentage == 100)
+    
+    # 左侧车道后方车组 (高速,大间距20m)
+    left_rear_group: all_lanes_car_group with:
+        keep(it.reference_car == sut.car)
+        keep(it.cars.size() == 2)
+        keep(it.reference_car_index == 0)
+    
+    for car in left_rear_group.cars:
+        keep(car.initial_bm == fast_driver)
+        keep(car.color == green)
+        keep(car.ftx_driver.collision_avoidance_behavior.safety_distance_lon == 20m)
+    
+    for params in left_rear_group.members_params:
+        keep(params.min_initial_ttc in [2s..4s])
+        keep(params.initial_speed_percentage == 100)
+    
+    do parallel(duration: [15s..20s]):
+        sut.car.drive()
+        left_front_group.group_drive()
+        right_front_group.group_drive()
+        left_rear_group.group_drive()

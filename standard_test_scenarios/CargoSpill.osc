@@ -1,0 +1,61 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend object_kind: [cargo]
+
+actor cargo inherits plain_object(kind == cargo):
+    keep(is_supported_by_sim == true)
+    keep(default bbox.length in [0.1..5]m)
+    keep(default bbox.width in [0.1..5]m)
+    keep(default bbox.height in [0.1..5]m)
+    keep(default physical.passable == false)
+
+
+extend top.main:
+    ego_lane: int with:
+        keep(ego_lane >= 1)
+    lead_lane: int with:
+        keep(lead_lane == ego_lane+1)
+    falling_cargo: cargo
+    lead_vehicle: vehicle with:
+        keep(lead_vehicle.vehicle_category == semi_trailer_truck)
+
+    do parallel(overlap: any, start_to_start: 0s):
+        vehicles_drive: serial:
+            start_up_drive: parallel(overlap: equal):
+                sut.car.drive() with:
+                    ss: speed([40..60]kph)
+                    override(ss, run_mode: best_effort)
+                    lane(ego_lane, at: start)
+                    keep_lane()
+                lead_vehicle.drive() with:
+                    position(time: [2..10]s, ahead_of: sut.car, at: start)
+                    lane(lead_lane, at: start)
+                    keep_lane()
+            cargo_falls_drive: parallel(overlap: equal):
+                sut.car.drive() with:
+                    sks: keep_speed()
+                    override(sks, run_mode: best_effort)
+                    keep_lane()
+                lvs: lead_vehicle.drive() with:
+                    acceleration([-4..-2]mpsps)
+                    ls: speed(speed: [0..2]kph, at: end)
+                    override(ls, run_mode: best_effort)
+            with:
+                dur: duration([5..10]s)
+                override(dur, run_mode: best_effort)
+
+        # cargo waits for lead_vehicle to start slowing down
+        # phase to start and falls from the lead vehicle
+        cargo_falling: serial:
+            wait @lvs.start
+            falling_cargo.fall_behind(attach_to: lead_vehicle,
+                height: [0.1..2.5]m,
+                air_drag: [0.1..1]mpsps,
+                lon_offset: [1..1.5]m,
+                lat_offset: [-3.5..-1.5]m,
+                rel_angle: [-20..20]degree,
+                ground_drag_time: [2..4]s,
+                ground_drag: [2..5]mpsps)

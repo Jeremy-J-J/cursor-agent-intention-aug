@@ -1,0 +1,91 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 交通灯路口停车等待场景定义
+    # 路口路径定义
+    left_turn: roads_follow_in_junction_with_tl 
+    right_turn: roads_follow_in_junction_with_tl
+    straight_line: roads_follow_in_junction_with_tl
+
+    keep(straight_line.in_road.min_lanes >= 2)
+    keep(left_turn.internal_road.traffic_light_id == right_turn.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.traffic_light_id == straight_line.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.direction == left)
+    keep(right_turn.internal_road.direction == right)
+    keep(straight_line.internal_road.direction == straight)
+
+    # NPC车辆
+    npc_car_front: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+
+    lane_ego: int
+
+    # 偏移参数
+    end_offset: length with:
+        keep(end_offset in [10m..20m])
+
+    ego_offset: length with:
+        keep(ego_offset in [end_offset+1m..end_offset+60m])
+
+    npc_stop_offset: length with:
+        keep(npc_stop_offset in [1m..20m])
+
+    ego_stop_offset: length with:
+        keep(it == npc_stop_offset + 15m)
+
+    # 交通灯状态定义
+    tl_go_state: semantic_traffic_light_state with:
+        keep((straight_line.internal_road.valid_tl_go_exclusive and it == go_exclusive) or
+             (straight_line.internal_road.valid_tl_go and it == go))
+
+    tl_stop_state: semantic_traffic_light_state with:
+        keep((straight_line.internal_road.valid_tl_stop and it == stop) or
+             (straight_line.internal_road.valid_tl_stop_and_yield and it == stop_and_yield))
+
+    # 交通灯状态控制
+    on @sut_to.start:
+        var res := map.update_internal_road_tl_state(straight_line.internal_road, tl_stop_state)
+    on @leave_junction.start:
+        var res := map.update_internal_road_tl_state(straight_line.internal_road, tl_go_state)
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("min_lanes: $(straight_line.in_road.min_lanes)")
+
+    do serial():
+        # 阶段1：在路口前停车等待
+        sut_to: parallel():
+            # 自车：行驶到停车位置
+            sut_drive_to: sut.car.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                avoid_collisions(false)
+                lane(lane_ego, at: start)
+                keep_lane()
+                along(straight_line.in_road, at: start, end_offset: ego_offset)
+                along(straight_line.in_road, at: end, end_offset: ego_stop_offset)
+
+            # 前车：行驶到停车位置
+            npc_car_front.drive() with:
+                speed(test_speed, at: start, run_mode: best_effort)
+                lane(lane_ego, at: all)
+                along(straight_line.in_road, at: start, end_offset: end_offset)
+                along(straight_line.in_road, at: end, end_offset: npc_stop_offset)
+
+        # 阶段2：交通灯变绿后通过路口
+        leave_junction: parallel():
+            # 自车：通过路口
+            sut.car.drive() with:
+                keep_lane()
+                along(straight_line.out_road, at: end)
+
+            # 前车：通过路口
+            npc_car_front.drive() with:
+                keep_lane()
+                along(straight_line.out_road, at: end)
+

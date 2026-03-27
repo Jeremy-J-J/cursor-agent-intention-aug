@@ -1,0 +1,105 @@
+# 场景: CutInExit_test_run
+# 描述: 切入出口场景，自车向右侧出口车道变道，右侧车道有两辆NPC，同车道前方也有NPC
+# 地图: M56_FTX_highway_prague.xodr (高速公路)
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_highway_exit_top.osc"
+import "$OSC2LIB/scenarios/free_drive/npc_driving/npc_free_driving_top.osc"
+
+extend test_config:
+    set map = "$FTX/packages/maps/M56_FTX_highway_prague.xodr"
+
+scenario sut.CutInExit_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "CutInExit_test_run")
+    
+    my_road: highway_exit
+    
+    # 起始车道
+    lane_start: int with:
+        keep(it in [1..2])
+    
+    # 场景持续时间
+    driving_duration: time with:
+        keep(it in [1s..25s])
+    
+    # NPC车道(在起始车道右侧)
+    npc_lane: int with:
+        keep(it == lane_start + 1)
+    
+    # 自车速度
+    ego_speed: speed with:
+        keep(default it == 80kph)
+    
+    # 右侧车道第一辆NPC相对位置
+    right_relative: length with:
+        keep(it in [-100m..100m])
+    
+    # 右侧车道第二辆NPC相对位置(在第一辆后方)
+    right_relative_2: length with:
+        keep(it in [-100m + right_relative..-20m + right_relative])
+        keep(it <= -20m)
+    
+    # 右侧车道NPC速度
+    right_relative_npc_speed: speed with:
+        keep(it in [80.0kph..100.0kph])
+    
+    # 同车道前方NPC相对位置
+    front_relative_position: length with:
+        keep(default it in [20m..50m])
+    
+    on @set_up.start:
+        call logger.log_info("===== CutInExit场景参数 =====")
+        call logger.log_info("自车速度:                   $(ego_speed)")
+        call logger.log_info("右侧NPC速度:                $(right_relative_npc_speed)")
+        call logger.log_info("右侧NPC 1相对位置:          $(right_relative)")
+        call logger.log_info("右侧NPC 2相对位置:          $(right_relative_2)")
+        call logger.log_info("前方NPC相对位置:            $(front_relative_position)")
+        call logger.log_info("场景持续时间:               $(duration_time)")
+    
+    do serial():
+        set_up: parallel():
+            # 自车驾驶并向右侧出口车道变道
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_highway_exit() with:
+                keep(it.gen_ego_speed_at_start == ego_speed)
+                keep(it.ego_road_element == my_road)
+                keep(it.gen_ego_lane_at_start == lane_start)
+                keep(it.gen_ego_lane_at_end == lane_start + 1)
+                keep(it.ego_driving_duration == driving_duration)
+            
+            # 右侧车道NPC 1
+            npc_driving_phase: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == right_relative)
+                keep(it.npc_initial_speed == right_relative_npc_speed)
+                keep(it.npc_target_speed == right_relative_npc_speed)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+            
+            # 右侧车道NPC 2
+            npc_driving_phase_3: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == right_relative_2)
+                keep(it.npc_initial_speed == right_relative_npc_speed)
+                keep(it.npc_target_speed == right_relative_npc_speed)
+                keep(it.npc_initial_lane == npc_lane)
+                keep(it.npc_target_lane == npc_lane)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+            
+            # 同车道前方NPC
+            npc_driving_phase_2: sut.npc_free_driving() with:
+                keep(it.npc_relative_position == front_relative_position)
+                keep(it.npc_initial_lane == lane_start)
+                keep(it.npc_target_lane == lane_start)
+                keep(it.npc_duration == driving_duration)
+                keep(it.ref_car == sut.car)
+
+extend top.main:
+    do sut.CutInExit_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "CutInExit_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

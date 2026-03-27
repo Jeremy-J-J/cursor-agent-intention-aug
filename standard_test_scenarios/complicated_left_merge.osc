@@ -1,0 +1,87 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 左转路口合并场景定义
+    main_road: road_with_merging_lane with:
+        keep(it.less_lanes_road.lanes >= 2)
+    
+    road_in: one_way_road with:
+        keep(it.max_lanes == 1)
+    
+    # NPC车辆
+    npc_car_front: vehicle
+    npc_car_side: vehicle
+    npc_car_side_2: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    lane_ego: int
+    
+    # 偏移参数
+    ego_offset: length with:
+        keep(ego_offset <= main_road.merging_lane.length - 5m)
+        keep(ego_offset >= 5m)
+        keep(ego_offset >= main_road.merging_lane.length - 120m)
+    
+    npc_side_offset: length with:
+        keep(it <= main_road.length - 10m)
+        keep(it in [ego_offset - 60m..ego_offset - 15m])
+    
+    npc_front_offset_range: length with:
+        keep(it in [ego_offset + 10m..ego_offset + 20m])
+    npc_side_2_offset_range: length with:
+        keep(it in [npc_side_offset + 20m..npc_side_offset + 40m])
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.enable == true)
+
+
+    do serial():
+        sut_to: parallel():
+            # 自车：从冲突道路汇入主路
+            serial():
+                sut_drive_leave: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(main_road.merging_lane, at: start, start_offset: ego_offset)
+                    along(main_road, at: end)
+                    lane(lane_ego, at: start)
+                    lane(lane_ego - 1, at: end)
+
+                sut_drive_leave_2: sut.car.drive() with:
+                    along(main_road, at: start)
+                    along(main_road.less_lanes_road, at: end)
+                    keep_lane(run_mode: best_effort)
+
+            # 前车：在冲突道路上，位于自车前方
+            serial():
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(main_road.merging_lane, at: start, start_offset: npc_front_offset_range)
+                    along(main_road.less_lanes_road, at: end)
+                    keep_speed(run_mode: best_effort)
+
+            # 侧方车1：在主路内部道路上，最右侧车道
+            serial():
+                npc_car_side.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(lane_ego -1, at: start)
+                    along(main_road, at: start, start_offset: npc_side_offset)
+                    along(main_road.less_lanes_road, at: end)
+                    keep_lane(run_mode: best_effort)
+                    keep_speed(run_mode: best_effort)
+
+            # 侧方车2：在主路内部道路上，最右侧车道，位于侧方车1后方
+            serial():
+                npc_car_side_2.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(lane_ego -1, at: start)
+                    along(main_road, at: start, start_offset: npc_side_2_offset_range)
+                    along(main_road.less_lanes_road, at: end)
+                    keep_lane(run_mode: best_effort)
+                    keep_speed(run_mode: best_effort)
+

@@ -1,0 +1,85 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 左转路口合并场景定义
+    main_road: roads_follow_in_junction with:
+        keep(it.internal_road.direction == straight)
+        keep(it.out_road.min_lanes >= 2)
+    
+    road_in: one_way_road with:
+        keep(it.max_lanes == 1)
+    
+    road_curvature_right: internal_road with:
+        keep(it.direction == right)
+    
+    internal_road: internal_road_with_conflict
+    keep(internal_road.internal_road_id == main_road.internal_road.id)
+    keep(internal_road.conflicting_road.id == road_curvature_right.id)
+
+    # NPC车辆
+    npc_car_front: vehicle
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    lane_ego: int
+    
+    # 偏移参数
+    ego_offset: length with:
+        keep(ego_offset <= road_in.length - 5m)
+        keep(ego_offset >= 5m)
+    
+    npc_offset: length with:
+        keep(npc_offset in [ego_offset - 50m..ego_offset - 10m])
+        keep(npc_offset <= 50m)
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.enable == true)
+
+    on @sut_drive_to.start:
+        call logger.log_info("road_in.id: $(road_in.id)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：从入口道路进入，经过冲突道路，汇入主路，最后变道
+            serial():
+                # 阶段1：从入口道路进入冲突道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(lane_ego)
+                    along(road_in, at: start, end_offset: ego_offset)
+                    along(internal_road.conflicting_road, at: end, run_mode: best_effort)
+
+                # 阶段2：从冲突道路汇入主路
+                sut_drive_leave: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(internal_road.conflicting_road, at: start)
+                    along(main_road.out_road, at: end)
+
+                # 阶段3：在主路上变道
+                sut_drive_change: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(1, at: end)
+                    along(main_road.out_road)
+
+            # 前车：从入口道路进入，经过冲突道路，汇入主路
+            serial():
+                # 阶段1：从入口道路进入冲突道路
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    lane(lane_ego)
+                    along(road_in, at: start, end_offset: npc_offset)
+                    along(internal_road.conflicting_road, at: end, run_mode: best_effort)
+                
+                # 阶段2：从冲突道路汇入主路（禁用碰撞避免以测试场景）
+                npc_car_front.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    along(internal_road.conflicting_road, at: start)
+                    along(main_road.out_road, at: end)
+
+

@@ -1,0 +1,76 @@
+# 测试场景: 自行车无等待穿越 (CBNA - Crossing Bicycle No Avoidance)
+# 描述: 测试自行车从右侧穿越道路时的避让行为
+# 场景: 自车行驶中,自行车从右侧以15kph横穿道路,不等待
+
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+import "$OSC2LIB/scenarios/free_drive/ego_free_drive_auto_gen/ego_free_drive_auto_gen_one_way_road_top.osc"
+import "$OSC2LIB/scenarios/crossing_VRU/vru_crossing/vru_crossing_cyclist_no_wait_top.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+scenario sut.cbna_test_run inherits project_base_scenario:
+    keep(default scenario_str_generic == "cbna_test_run")
+    
+    # 测试道路
+    road: one_way_road
+
+    # 起始偏移
+    start_offset: length with:
+        keep(it <= road.length - 100m)
+
+    # 自车起始速度
+    start_speed: speed with:
+        keep(default it in [20kph, 30kph, 40kph, 50kph, 60kph, 70kph, 80kph])
+
+    # VRU起始偏移距离
+    vru_start_offset: length with:
+        keep(it in [start_speed * 1s + 5m..start_speed * 1s + 20m])
+
+    # 测试持续时间
+    duration_time: time with:
+        keep(it >= vru_start_offset / start_speed + 2s)
+
+    # 横向偏移
+    lat_offset: length with:
+        keep(it in [vru_start_offset / start_speed * 5kph - 5m..vru_start_offset / start_speed * 5kph])
+
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    on @set_up.start:
+        call logger.log_info("start_speed: $(start_speed)")
+        call logger.log_info("vru_start_offset: $(vru_start_offset)")
+        call logger.log_info("duration_time: $(duration_time)")
+        call logger.log_info("lat_offset: $(lat_offset)")
+
+    do serial():
+        set_up: parallel():
+            # 自车自由行驶
+            ego_free_drive_phase: sut.ego_free_drive_auto_gen_one_way_road() with:
+                keep(it.gen_ego_speed_at_start == start_speed)
+                keep(it.ego_road_element == road)
+                keep(it.gen_min_lanes == 1)
+                keep(it.gen_max_lanes == 2)
+                keep(it.gen_ego_lane_at_start == 1)
+                keep(it.ego_start_offset == start_offset)
+                keep(it.ego_driving_duration == duration_time)
+
+            # 自行车穿越阶段
+            vru_crossing_phase: sut.vru_crossing_cyclist_no_wait() with:
+                keep(it.move_from == right)
+                keep(it.gen_cyclist_longitudinal_distance == vru_start_offset + start_offset)
+                keep(it.gen_cyclist_lateral_distance == lat_offset)
+                keep(it.gen_cyclist_speed == 15kph)
+                keep(it.gen_number_of_cyclists == 1)
+                keep(it.up_coming_car == sut.car)
+                keep(it.my_road == road)
+
+extend top.main:
+    do sut.cbna_test_run()
+
+extend test_additional_parameters:
+    const test_index: string
+
+extend test_config:
+    set test_name = "cbna_test_run"
+    set additional_parameters.test_index = "auto_20251106_075241"

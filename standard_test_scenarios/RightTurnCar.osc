@@ -1,0 +1,91 @@
+import "$PROJECT_DIR/projectLibs/project_scenario_base/project_base_scenario_model_ssp.osc"
+
+extend test_config:
+    set map = "$OSC2LIB/maps/M499_FTX_suburban.xodr"
+
+extend top.main:
+    # 右转路口场景定义（带静态车辆）
+    ego_one_way_road: one_way_road
+    oncoming_one_way_road: one_way_road
+
+    top.roads_enter_junction_relation(ego_one_way_road, oncoming_one_way_road, 
+        relative_direction: opposite)
+
+    # 对向直行道路定义
+    opposite_straight: roads_follow_in_junction_with_tl
+    keep(opposite_straight.in_road.id == oncoming_one_way_road.id)
+    keep(opposite_straight.internal_road.direction == straight)
+    keep(opposite_straight.internal_road.junction_id == left_turn.internal_road.junction_id)
+
+    # 路口路径定义
+    left_turn: roads_follow_in_junction_with_tl 
+    right_turn: roads_follow_in_junction_with_tl
+    straight_line: roads_follow_in_junction_with_tl
+
+    keep(straight_line.in_road.min_lanes >= 2)
+    keep(left_turn.internal_road.traffic_light_id == right_turn.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.traffic_light_id == straight_line.internal_road.traffic_light_id)
+    keep(left_turn.internal_road.direction == left)
+    keep(right_turn.internal_road.direction == right)
+    keep(straight_line.internal_road.direction == straight)
+    keep(straight_line.in_road.id == ego_one_way_road.id)
+
+    # 人行横道道路定义
+    # road_on_crosswalk - 离开路口时到达的与人行横道一致的道路路线
+    road_on_crosswalk: road_on_crosswalk with:
+        keep(it.kind == junction_exit)
+
+    # road_to_crosswalk - 到达 'road_on_crosswalk' 的道路路线
+    road_to_crosswalk: road_to_crosswalk with:
+        keep(it.road_on_crosswalk == self.road_on_crosswalk)
+
+    # 静态车辆定义
+    stop_car: stationary_vehicle
+    keep(stop_car.vehicle_category == sedan)
+    stop_position: msp_position
+    position_along_road(stop_position, 
+                    right_turn.out_road, lon_offset: 5m, 
+                    lat_offset: 0m, rightmost_lane: true)
+
+    # 场景参数
+    test_speed: speed with:
+        keep(test_speed in [20kph..80kph])
+    
+    lane_ego: int
+
+    # 行为配置
+    keep(sut.car.ftx_driver.bypass_behavior.allow_opposite_left_side == true)
+
+    # 日志输出
+    on @sut_drive_to.start:
+        call logger.log_info("min_lanes: $(straight_line.in_road.min_lanes)") 
+        call logger.log_info("road_on_crosswalk.length: $(road_on_crosswalk.length)")
+
+    do serial():
+        sut_to: parallel():
+            # 自车：右转通过路口，经过人行横道
+            serial():
+                # 阶段1：从入口道路进入路口内部道路
+                sut_drive_to: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    avoid_collisions(false)
+                    lane(lane_ego, at: start)
+                    along(ego_one_way_road, at: start)
+                    along(right_turn.internal_road, at: end)
+
+                # 阶段2：从路口内部道路经过人行横道
+                sut_drive_crosswalk: sut.car.drive() with:
+                    speed(test_speed, at: start, run_mode: best_effort)
+                    along(right_turn.internal_road, at: start)
+                    along(road_to_crosswalk, at: start)
+                    along(road_on_crosswalk, at: end)
+
+                # 阶段3：从人行横道驶出到出口道路
+                sut_drive_out: sut.car.drive() with:
+                    along(right_turn.out_road, at: end)
+
+            # 静态车辆：停在出口道路右侧
+            serial():
+                stop_car.exists_at(stop_position)
+
+
