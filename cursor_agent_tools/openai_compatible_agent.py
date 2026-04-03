@@ -74,8 +74,8 @@ class OpenAICompatibleAgent(BaseAgent):
         # self.simple_model_id = "qwen3-4b"
         self.simple_model_id = "holo-model"
 
-        self.vision_model_host = "http://localhost:8018/v1"
-        self.vision_model_id = "qwen3-vl-instruct"
+        self.vision_model_host = "http://10.160.199.227:8018/v1"
+        self.vision_model_id = "holo-model"
         #def get_trajactory_attention(video_url, system_prompt, user_prompt):
 
         try:
